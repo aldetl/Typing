@@ -6,9 +6,15 @@ Table of Contents
 
 
 
+# Version
+
+v1.3.0, 2021-12-02,
+
+
+
 # Introduction
 
-**Typing** controls cursor movements and execute some commands by typing a single character. Its purpose is to improve your typing efficiency by reducing the frequency of switching between keyboard and mouse and movement distance of hands. In short, it keeps your hands on the keyboards!
+**Typing** controls cursor movements and execute some commands by typing a single character. Its purpose is to improve your typing efficiency by reducing the frequency of switching between keyboard and mouse as well as the movement distance of hands. In short, it keeps your hands on the keyboards!
 
 
 
@@ -16,32 +22,45 @@ Table of Contents
 
 After running, it is minimized and shows an **icon** in system **task tray** (on the taskbar).
 
-Now you can enter/exit command-mode by pressing the 'mode-key' (default is '**Caps Lock**').
 
-- the icon will change,
 
-The basic key commands in command-mode are:
+It now supports two operation modes:
 
-- G                => exit command-mode
-- I, K, J, L      => Up, Down, Left, Right
-- U, O          => Home, End
-- N, M         => PageUp, PageDown
-- E, R           => Delete, Backspace
-- T, Y           => type current time, date
-- Q              => undo last movement (for I, K, J, L, U, O)
-- A, S, D, F  => set repeat number (10, 5, 3, 1) for next movement (I, K, J, L, U, O)
-
-If you want to send the mode-key to the system, press twice continuously.
+- vim-mode. 
+  - Press the mode-key (default is '**CapsLock**') to enter this mode. 
+  - Then, press other keys to execute commands.
+- emacs-mode (hotkey)
+  - Press a hotkey to execute commands. No need to enter the vim-mode. 
 
 
 
-Now you are ready to go. If you want to know more about the program, please see the following reference.
+The basic commands in vim-mode are:
+
+- I, K, J, L          => Up, Down, Left, Right
+- N, M, U, O    => PageUp, PageDown, Home, End
+- A, S, D, F       => set repeat number (10, 5, 3, 1) for next movement (I, K, J, L, N, M)
+- Q                   => undo last movement (for I, K, J, L, N, M)
+- T, Y                => type current time, date
+- G                   => exit command-mode
+
+If you want to send the `CapsLock` to the system, press:
+
+- `RShiftKey+CapsLock`
+
+
+
+Indication of current mode status:
+
+- A highlight tip will show following the mouse cursor according to the mode status.
+- The icon in system task tray will change too.
 
 
 
 # Reference
 
-## Mode change
+## Vim-mode
+
+### Mode change
 
 | operation          | key                 | note                   |
 | ------------------ | ------------------- | ---------------------- |
@@ -54,7 +73,7 @@ You can change the `mode key` in the `configuration.ini` in the folder of the pr
 
 
 
-## movement commands
+### movement commands
 
 In command mode, you can press a single character to directly control cursor move. 
 
@@ -80,7 +99,7 @@ You can also set a step (repeat number) for next movement (I, K, J, L, N, M). Th
 
 
 
-## Other commands
+### Other commands
 
 | def  | name                | des  |
 | ---- | ------------------- | ---- |
@@ -92,7 +111,9 @@ You can also set a step (repeat number) for next movement (I, K, J, L, N, M). Th
 
 
 
-## Keep icon showing in the task tray in Windows 10
+## Other setting
+
+### Keep icon showing in the task tray in Windows 10
 
 Open "**taskbar setting**"
 
