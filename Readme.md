@@ -12,7 +12,9 @@ v1.3.2
 
 # Introduction
 
-**Typing** controls cursor movements and execute some commands by typing a single character. Its purpose is to improve your typing efficiency by reducing the frequency of switching between keyboard and mouse as well as the movement distance of hands. In short, it keeps your hands on the keyboards!
+**Typing** is a tool to improve your typing efficiency by reducing the frequency of switching between keyboard and mouse as well as the movement distance of hands. In short, it keeps your hands on the keyboards.
+
+In **Typing**, you can move cursor by pressing character keys (vim-like movement) or by pressing hotkeys (emacs-like movement). You can also define and send customized hotkeys.
 
 
 
