@@ -6,9 +6,7 @@ Table of Contents
 
 
 
-# Version
-
-v1.3.0, 2021-12-02,
+v1.3.2
 
 
 
@@ -20,100 +18,117 @@ v1.3.0, 2021-12-02,
 
 # Quick start
 
-After running, it is minimized and shows an **icon** in system **task tray** (on the taskbar).
-
-
+After running, it is minimized into system **task tray** (on the taskbar).
 
 It now supports two operation modes:
 
-- vim-mode. 
+- vim-mode (command-mode)
   - Press the mode-key (default is '**CapsLock**') to enter this mode. 
   - Then, press other keys to execute commands.
-- emacs-mode (hotkey)
+- emacs-mode (hotkey-mode)
   - Press a hotkey to execute commands. No need to enter the vim-mode. 
 
+The basic commands in command-mode are:
 
+- `I, K, J, L`          => `Up, Down, Left, Right`
+- `N, M, U, O`    => `PageUp, PageDown, Home, End`
+- `A, S, D, F`       => set repeat number (10, 5, 2, 1) for next move (`I, K, J, L, N, M`)
+- `Q `                  => undo last move (`I, K, J, L, N, M`)
+- `T, Y`                => type current time, date
+- `G`                   => exit command-mode
 
-The basic commands in vim-mode are:
+- `RShiftKey+CapsLock`  => `CapsLock`
 
-- I, K, J, L          => Up, Down, Left, Right
-- N, M, U, O    => PageUp, PageDown, Home, End
-- A, S, D, F       => set repeat number (10, 5, 3, 1) for next movement (I, K, J, L, N, M)
-- Q                   => undo last movement (for I, K, J, L, N, M)
-- T, Y                => type current time, date
-- G                   => exit command-mode
-
-If you want to send the `CapsLock` to the system, press:
-
-- `RShiftKey+CapsLock`
-
-
-
-Indication of current mode status:
+Notification of current mode state:
 
 - A highlight tip will show following the mouse cursor according to the mode status.
 - The icon in system task tray will change too.
 
 
 
-# Reference
+# Settings
 
-## Vim-mode
-
-### Mode change
-
-| operation          | key                 | note                   |
-| ------------------ | ------------------- | ---------------------- |
-| enter command mode | `mode key`          | Default is `Caps Lock` |
-| exit command mode  | `mode key` , or `G` |                        |
-
-The default `mode key` is `Caps Lock`.
-
-You can change the `mode key` in the `configuration.ini` in the folder of the program.
+Settings are defined in `configuration.ini` in the folder of the program.
 
 
 
-### movement commands
+## Mode change
+
+| key                 | operation          | note |
+| ------------------- | ------------------ | ---- |
+| `CapsLock`          | enter command mode |      |
+| `CapsLock` , or `G` | exit command mode  |      |
+
+The default `mode-key` is `CapsLock`.
+
+
+
+## Movement commands
 
 In command mode, you can press a single character to directly control cursor move. 
 
-| key  | movement   | note |
-| ---- | ---------- | ---- |
-| `I`  | `Up`       |      |
-| `K`  | `Down`     |      |
-| `J`  | `Left`     |      |
-| `L`  | `Right`    |      |
-| `U`  | `Home`     |      |
-| `O`  | `End`      |      |
-| `N`  | `PageUp`   |      |
-| `N`  | `PageDown` |      |
+| command-mode | hotkey-mode  | movement   |
+| ------------ | ------------ | ---------- |
+| `I`          | `CapsLock+I` | `Up`       |
+| `K`          | `CapsLock+K` | `Down`     |
+| `J`          | `CapsLock+J` | `Left`     |
+| `L`          | `CapsLock+L` | `Right`    |
+| `U`          | `CapsLock+U` | `Home`     |
+| `O`          | `CapsLock+O` | `End`      |
+| `N`          | `CapsLock+N` | `PageUp`   |
+| `M`          | `CapsLock+M` | `PageDown` |
 
-You can also set a step (repeat number) for next movement (I, K, J, L, N, M). The default step is 1.
+You can also set a step (repeat number) for next movement (`I, K, J, L, N, M`). The default step is 1.
 
 | key  | movement step | note |
 | ---- | ------------- | ---- |
-| `A`  | 1             |      |
-| `S`  | 3             |      |
-| `D`  | 5             |      |
-| `F`  | 10            |      |
+| `A`  | 10            |      |
+| `S`  | 5             |      |
+| `D`  | 2             |      |
+| `F`  | 1             |      |
 
 
 
-### Other commands
+## Other commands
 
-| def  | name                | des  |
-| ---- | ------------------- | ---- |
-| `E`  | `Del`               |      |
-| `R`  | `Backspace`         |      |
-| `Y`  | type current Date   |      |
-| `T`  | type current time   |      |
-| `Q`  | under last movement |      |
+| command-mode | hotkey-mode  | name                |
+| ------------ | ------------ | ------------------- |
+| `E`          | `CapsLock+E` | `Del`               |
+| `R`          | `CapsLock+R` | `Backspace`         |
+| `Y`          | `CapsLock+Y` | type current Date   |
+| `T`          | `CapsLock+T` | type current time   |
+| `Q`          | `CapsLock+Q` | under last movement |
 
 
 
-## Other setting
+## Text selection
 
-### Keep icon showing in the task tray in Windows 10
+Test selection is achieved by sending `Shift` modifier key. There are three ways to do this.
+
+- Enter command-mode; Type `V`; Select using movement keys.
+- Enter command-mode; Select using `Shift+`movement keys.
+- Any state, Select using hotkey `CapsLock+Shift+`movement keys.
+
+Note
+
+- The first method supports the step setting, while other two method not.
+
+
+
+## State notification
+
+The program can show whether the it is in command-mode or not. It can also show the state of the `CapsLock` key.
+
+There are two ways to show the states.
+
+- A circle will be drawn at the position of the mouse cursor. The color and radius can be set in the configuration file.
+- The icon in task tray changes according to current state. 
+
+
+
+# Other setting
+
+## Keep icon showing in the task tray in Windows 10
 
 Open "**taskbar setting**"
 
