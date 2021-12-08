@@ -17,6 +17,12 @@ Table of contents
 - improve performance.
 - `LControlKey, RControlKey, LMenu, RMenu` can be set on the right side now.
 
+### v1.3.2.1
+
+2021-12-07,
+
+- fix bug: color setting for mode tip.
+
 
 
 ## v1.3.1
