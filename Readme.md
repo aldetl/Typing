@@ -12,17 +12,29 @@ v1.3.2
 
 # Introduction
 
-**Typing** is a tool to improve your typing efficiency by reducing the frequency of switching between keyboard and mouse as well as the movement distance of hands. In short, it keeps your hands on the keyboards.
+**Typing** is a tool to improve your typing efficiency by reducing the frequency of switching between keyboard and mouse as well as the movement distance of hands. You can move mouse cursor by pressing character keys after entering a command-mode (vim-like movement) or by pressing hotkeys directly (emacs-like movement). Comparing to vim or emacs, it is not limited to specific software and can be used anywhere across the system. 
 
-In **Typing**, you can move cursor by pressing character keys (vim-like movement) or by pressing hotkeys (emacs-like movement). You can also define and send customized hotkeys.
+**Typing** can also be used as a key mapping tool. You can define and send customized keys.
+
+
+
+Design philosophy: 
+
+- Less is more. 
+  - Typing tries to find and use the most efficient way. Anything tedious should be simplified.
+- Real application.
+  - Typing focuses on final user experience. The author has been using it for about ten years, and still use and improve it everyday. 
+- All details.
 
 
 
 # Quick start
 
+Download and run `Typing.exe` directly. No installation required. 
+
 After running, it is minimized into system **task tray** (on the taskbar).
 
-It now supports two operation modes:
+Now you can move cursor or send keys through two methods:
 
 - vim-mode (command-mode)
   - Press the mode-key (default is '**CapsLock**') to enter this mode. 
@@ -43,12 +55,19 @@ The basic commands in command-mode are:
 
 Notification of current mode state:
 
-- A highlight tip will show following the mouse cursor according to the mode status.
+- A solid circle will show following the mouse cursor according to the mode status.
 - The icon in system task tray will change too.
 
 
 
-# Settings
+Note:
+
+- There may be a warning in windows 10 for running .exe file downloaded from internet. But this program is safe. 
+- Currently, I can only do programming in my spare time. But I love coding and I will keep improving this tool.
+
+
+
+# Commands & settings
 
 Settings are defined in `configuration.ini` in the folder of the program.
 
@@ -69,16 +88,18 @@ The default `mode-key` is `CapsLock`.
 
 In command mode, you can press a single character to directly control cursor move. 
 
-| command-mode | hotkey-mode  | movement   |
-| ------------ | ------------ | ---------- |
-| `I`          | `CapsLock+I` | `Up`       |
-| `K`          | `CapsLock+K` | `Down`     |
-| `J`          | `CapsLock+J` | `Left`     |
-| `L`          | `CapsLock+L` | `Right`    |
-| `U`          | `CapsLock+U` | `Home`     |
-| `O`          | `CapsLock+O` | `End`      |
-| `N`          | `CapsLock+N` | `PageUp`   |
-| `M`          | `CapsLock+M` | `PageDown` |
+| command-mode | hotkey-mode  | movement                             |
+| ------------ | ------------ | ------------------------------------ |
+| `I`          | `CapsLock+I` | `Up`                                 |
+| `K`          | `CapsLock+K` | `Down`                               |
+| `J`          | `CapsLock+J` | `Left`                               |
+| `L`          | `CapsLock+L` | `Right`                              |
+| `U`          | `CapsLock+U` | `Home`                               |
+| `O`          | `CapsLock+O` | `End`                                |
+| `N`          | `CapsLock+N` | `PageUp`                             |
+| `M`          | `CapsLock+M` | `PageDown`                           |
+| `H`          | `CapsLock+H` | move to left word (`Control+Left`)   |
+| `P`          | `CapsLock+P` | move to right word (`Control+Right`) |
 
 You can also set a step (repeat number) for next movement (`I, K, J, L, N, M`). The default step is 1.
 
@@ -93,13 +114,13 @@ You can also set a step (repeat number) for next movement (`I, K, J, L, N, M`). 
 
 ## Other commands
 
-| command-mode | hotkey-mode  | name                |
-| ------------ | ------------ | ------------------- |
-| `E`          | `CapsLock+E` | `Del`               |
-| `R`          | `CapsLock+R` | `Backspace`         |
-| `Y`          | `CapsLock+Y` | type current Date   |
-| `T`          | `CapsLock+T` | type current time   |
-| `Q`          | `CapsLock+Q` | under last movement |
+| command-mode | hotkey-mode  | name                                    |
+| ------------ | ------------ | --------------------------------------- |
+| `E`          | `CapsLock+E` | `Del`                                   |
+| `R`          | `CapsLock+R` | `Backspace`                             |
+| `Y`          | `CapsLock+Y` | type current Date                       |
+| `T`          | `CapsLock+T` | type current time                       |
+| `Q`          | `CapsLock+Q` | undo last movement (`I, K, J, L, N, M`) |
 
 
 
@@ -107,9 +128,9 @@ You can also set a step (repeat number) for next movement (`I, K, J, L, N, M`). 
 
 Test selection is achieved by sending `Shift` modifier key. There are three ways to do this.
 
-- Enter command-mode; Type `V`; Select using movement keys.
-- Enter command-mode; Select using `Shift+`movement keys.
-- Any state, Select using hotkey `CapsLock+Shift+`movement keys.
+- Enter command-mode; Type `V`; Select text using movement keys.
+- Enter command-mode; Select text using `Shift+`movement keys.
+- Under any state, select text using hotkey `CapsLock+Shift+`movement keys.
 
 Note
 

@@ -10,18 +10,30 @@ Table of contents
 
 
 
+## v1.3.2.2
+
+2021-12-16,
+
+- Fix bug: mode-key does not work sometimes.
+- Hotkey commands will not affect time counting of mode auto-exit.
+- .net framework 4.8.
+
+
+
+## v1.3.2.1
+
+2021-12-07,
+
+- fix bug: color setting for mode tip.
+
+
+
 ## v1.3.2
 
 2021-12-06, 
 
 - improve performance.
 - `LControlKey, RControlKey, LMenu, RMenu` can be set on the right side now.
-
-### v1.3.2.1
-
-2021-12-07,
-
-- fix bug: color setting for mode tip.
 
 
 
