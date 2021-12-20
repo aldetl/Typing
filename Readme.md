@@ -30,7 +30,7 @@ Design philosophy:
 
 # Quick start
 
-Download and run `Typing.exe` directly. No installation required. 
+Download `Typing` folder and run `Typing.exe` directly. No installation required. 
 
 After running, it is minimized into system **task tray** (on the taskbar).
 
@@ -40,17 +40,17 @@ Now you can move cursor or send keys through two methods:
   - Press the mode-key (default is '**CapsLock**') to enter this mode. 
   - Then, press other keys to execute commands.
 - emacs-mode (hotkey-mode)
-  - Press a hotkey to execute commands. No need to enter the vim-mode. 
+  - Press a hotkey to execute commands. No need to enter the command-mode. 
 
 The basic commands in command-mode are:
 
-- `I, K, J, L`          => `Up, Down, Left, Right`
+- `I, K, J, L`    => `Up, Down, Left, Right`
 - `N, M, U, O`    => `PageUp, PageDown, Home, End`
-- `A, S, D, F`       => set repeat number (10, 5, 2, 1) for next move (`I, K, J, L, N, M`)
-- `Q `                  => undo last move (`I, K, J, L, N, M`)
-- `T, Y`                => type current time, date
-- `G`                   => exit command-mode
-
+- `O, P`                 => Move to left, right word
+- `A, S, D, F`     => set repeat number (10, 5, 2, 1) for next move (`I, K, J, L, N, M`)
+- `Q `                        => undo last move (`I, K, J, L, N, M`)
+- `T, Y`                  => type current time, date
+- `G`                         => exit command-mode
 - `RShiftKey+CapsLock`  => `CapsLock`
 
 Notification of current mode state:
@@ -114,13 +114,16 @@ You can also set a step (repeat number) for next movement (`I, K, J, L, N, M`). 
 
 ## Other commands
 
-| command-mode | hotkey-mode  | name                                    |
-| ------------ | ------------ | --------------------------------------- |
-| `E`          | `CapsLock+E` | `Del`                                   |
-| `R`          | `CapsLock+R` | `Backspace`                             |
-| `Y`          | `CapsLock+Y` | type current Date                       |
-| `T`          | `CapsLock+T` | type current time                       |
-| `Q`          | `CapsLock+Q` | undo last movement (`I, K, J, L, N, M`) |
+| command-mode | hotkey-mode      | name                                    |
+| ------------ | ---------------- | --------------------------------------- |
+|              | `CapsLock+Space` | `CapsLock`                              |
+| `E`          | `CapsLock+E`     | `Del`                                   |
+| `R`          | `CapsLock+R`     | `Backspace`                             |
+| `Y`          | `CapsLock+Y`     | type current Date                       |
+| `T`          | `CapsLock+T`     | type current time                       |
+| `Q`          | `CapsLock+Q`     | undo last movement (`I, K, J, L, N, M`) |
+
+
 
 
 

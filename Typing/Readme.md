@@ -114,13 +114,14 @@ You can also set a step (repeat number) for next movement (`I, K, J, L, N, M`). 
 
 ## Other commands
 
-| command-mode | hotkey-mode  | name                                    |
-| ------------ | ------------ | --------------------------------------- |
-| `E`          | `CapsLock+E` | `Del`                                   |
-| `R`          | `CapsLock+R` | `Backspace`                             |
-| `Y`          | `CapsLock+Y` | type current Date                       |
-| `T`          | `CapsLock+T` | type current time                       |
-| `Q`          | `CapsLock+Q` | undo last movement (`I, K, J, L, N, M`) |
+| command-mode | hotkey-mode      | name                                    |
+| ------------ | ---------------- | --------------------------------------- |
+|              | `CapsLock+Space` | `CapsLock`                              |
+| `E`          | `CapsLock+E`     | `Del`                                   |
+| `R`          | `CapsLock+R`     | `Backspace`                             |
+| `Y`          | `CapsLock+Y`     | type current Date                       |
+| `T`          | `CapsLock+T`     | type current time                       |
+| `Q`          | `CapsLock+Q`     | undo last movement (`I, K, J, L, N, M`) |
 
 
 
