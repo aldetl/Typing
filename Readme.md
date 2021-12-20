@@ -48,10 +48,9 @@ The basic commands in command-mode are:
 - `N, M, U, O`    => `PageUp, PageDown, Home, End`
 - `O, P`                 => Move to left, right word
 - `A, S, D, F`     => set repeat number (10, 5, 2, 1) for next move (`I, K, J, L, N, M`)
-- `Q `                        => undo last move (`I, K, J, L, N, M`)
 - `T, Y`                  => type current time, date
 - `G`                         => exit command-mode
-- `RShiftKey+CapsLock`  => `CapsLock`
+- `CapsLock+Space`  => `CapsLock`
 
 Notification of current mode state:
 
