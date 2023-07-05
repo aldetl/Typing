@@ -8,7 +8,9 @@ Table of contents
 
 # overview 
 
-
+## v1.3.2.3
+2023-07-05
+- Double click notify tray icon to enable/disable the program. 
 
 ## v1.3.2.2
 
