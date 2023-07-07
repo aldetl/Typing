@@ -6,18 +6,30 @@ Table of contents
 
 
 
-# overview 
+## v1.3.2.4
+
+2023-07-06,
+
+- Use hotkey to enable/disable the program. The hotkey is defined in 'configuration.ini'.
+
+
 
 ## v1.3.2.3
+
 2023-07-05
+
 - Double click notify tray icon to enable/disable the program. 
+
+
 
 ## v1.3.2.2
 
 2021-12-16,
 
 - Fix bug: mode-key does not work sometimes.
+
 - Hotkey commands will not affect time counting of mode auto-exit.
+
 - .net framework 4.8.
 
 
@@ -33,6 +45,7 @@ Table of contents
 ## v1.3.2
 
 2021-12-06, 
+
 
 - improve performance.
 - `LControlKey, RControlKey, LMenu, RMenu` can be set on the right side now.
