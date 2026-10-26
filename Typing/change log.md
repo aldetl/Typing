@@ -4,7 +4,9 @@ Table of contents
 
 ---
 
-
+## v1.4.0
+2026-10-26
+- improves scan-code and modifier handling, adds sleep/wake recovery.
 
 ## v1.3.2.4
 
