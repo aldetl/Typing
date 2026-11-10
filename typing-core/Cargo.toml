@@ -1,0 +1,9 @@
+[package]
+name = "typing-core"
+version = "0.1.0"
+edition = "2024"
+license-file = "../LICENSE"
+description = "Shared configuration and command interpretation for Typing"
+
+[lib]
+path = "src/lib.rs"

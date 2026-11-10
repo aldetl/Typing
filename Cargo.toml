@@ -1,0 +1,9 @@
+[workspace]
+members = ["typing-core", "typing-host", "typing-windows"]
+resolver = "3"
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+strip = "symbols"

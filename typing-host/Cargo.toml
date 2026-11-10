@@ -1,0 +1,9 @@
+[package]
+name = "typing-host"
+version = "0.1.0"
+edition = "2024"
+publish = false
+license-file = "../LICENSE"
+
+[dependencies]
+typing-core = { path = "../typing-core" }
