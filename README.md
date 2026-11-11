@@ -1,6 +1,6 @@
 # Typing
 
-Typing is an efficient tool that keeps your hands on the keyboard and reduces the need to switch between the keyboard and mouse while typing. You can use Vim-style command mode or Emacs-style direct shortcuts to move the caret, select text, and run custom commands across applications—without requiring plugins or integration from those applications.
+Typing is an efficient tool that keeps your hands on the keyboard. It greatly reduces the frequency of switching between the keyboard and mouse while you type. You can use Vim-style command mode or Emacs-style direct shortcuts to move the caret, select text, and run custom commands across applications—without requiring plugins or integration from those applications.
 
 ## Features
 
