@@ -23,8 +23,6 @@ Use **Ctrl+U** to enable or disable Typing. Choose **Show Window** from the tray
 
 In **Mapping Profile**, **Save** writes a profile and **Set as active** applies it. **Import** brings in supported profiles or legacy configuration mappings without changing the source file. Review imported mappings before activating them. See the [user guide](docs/USER_GUIDE.md) for the full command list, profile management, preferences, and troubleshooting.
 
-In **Settings**, choose **System default**, **English**, or **简体中文**. The interface and user guide switch immediately.
-
 ## Development
 
 Typing is designed for Windows, macOS, and Linux. Windows is currently the only released platform; macOS and Linux support is under development.
