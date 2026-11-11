@@ -256,21 +256,57 @@ static int formatted_text(void) {
     puts("PASS actual client date/time output and Caps Lock restoration");
     return 1;
 }
+static int wait_feedback_colors(int blue_top, int blue_bottom) {
+    ULONGLONG deadline = GetTickCount64() + 2000;
+    COLORREF top = CLR_INVALID, bottom = CLR_INVALID;
+    RECT bounds = {0}, after = {0};
+    POINT cursor = {0};
+    do {
+        CHECK(GetForegroundWindow() == receiver);
+        if (IsWindowVisible(overlay) && GetWindowRect(overlay, &bounds)) {
+            int width = bounds.right - bounds.left;
+            int height = bounds.bottom - bounds.top;
+            CHECK(width > 0 && height > 0);
+            HDC screen = GetDC(NULL);
+            CHECK(screen != NULL);
+            top = GetPixel(screen, bounds.left + width / 2, bounds.top + height / 4);
+            bottom = GetPixel(screen, bounds.left + width / 2, bounds.top + 3 * height / 4);
+            ReleaseDC(NULL, screen);
+            CHECK(GetWindowRect(overlay, &after));
+            CHECK(GetPhysicalCursorPos(&cursor));
+            /* Movement can cross a timer/render boundary while pixels are read. */
+            if (EqualRect(&bounds, &after) && bounds.left == cursor.x && bounds.top == cursor.y &&
+                top != CLR_INVALID && bottom != CLR_INVALID &&
+                (blue_top ? GetBValue(top) > GetRValue(top) : GetRValue(top) > GetBValue(top)) &&
+                (blue_bottom ? GetBValue(bottom) > GetRValue(bottom) : GetRValue(bottom) > GetBValue(bottom))) {
+                CHECK(GetForegroundWindow() == receiver);
+                return 1;
+            }
+        }
+        pump(10);
+    } while (GetTickCount64() < deadline);
+    fprintf(stderr, "Feedback expected blue top/bottom %d/%d, observed RGB %06lx/%06lx, "
+        "cursor (%ld,%ld), overlay (%ld,%ld,%ld,%ld)\n",
+        blue_top, blue_bottom, (unsigned long)top, (unsigned long)bottom,
+        cursor.x, cursor.y, bounds.left, bounds.top, bounds.right, bounds.bottom);
+    return 0;
+}
+
 static int feedback_states(void) {
-    POINT point;HDC screen;COLORREF top,bottom;
-    CHECK(toggle_caps_output());pump(100);
-    CHECK(GetPhysicalCursorPos(&point));screen=GetDC(NULL);
-    top=GetPixel(screen,point.x+15,point.y+7);bottom=GetPixel(screen,point.x+15,point.y+22);ReleaseDC(NULL,screen);
-    CHECK(top!=CLR_INVALID&&bottom!=CLR_INVALID);
-    CHECK(GetBValue(top)>GetRValue(top)&&GetRValue(bottom)>GetBValue(bottom));
-    CHECK(tap(VK_CAPITAL));pump(100);screen=GetDC(NULL);
-    top=GetPixel(screen,point.x+15,point.y+7);bottom=GetPixel(screen,point.x+15,point.y+22);ReleaseDC(NULL,screen);
-    CHECK(GetBValue(top)>GetRValue(top)&&GetBValue(bottom)>GetRValue(bottom));
-    CHECK(tap(VK_CAPITAL));CHECK(toggle_caps_output());pump(100);screen=GetDC(NULL);
-    top=GetPixel(screen,point.x+15,point.y+7);bottom=GetPixel(screen,point.x+15,point.y+22);ReleaseDC(NULL,screen);
-    CHECK(GetRValue(top)>GetBValue(top)&&GetRValue(bottom)>GetBValue(bottom));
-    CHECK(GetForegroundWindow()==receiver);
-    puts("PASS rendered command-only, Caps-Lock-only, and combined half-circle feedback colors preserve focus");
+    POINT target = {160, 80};
+    CHECK(toggle_caps_output());
+    CHECK(wait_feedback_colors(1, 0));
+    CHECK(ClientToScreen(receiver, &target));
+    CHECK(SetCursorPos(target.x, target.y));
+    CHECK(tap(VK_CAPITAL));
+    CHECK(wait_feedback_colors(1, 1));
+    target.x += 64;
+    CHECK(SetCursorPos(target.x, target.y));
+    CHECK(tap(VK_CAPITAL));
+    CHECK(toggle_caps_output());
+    CHECK(wait_feedback_colors(0, 0));
+    CHECK(GetForegroundWindow() == receiver);
+    puts("PASS rendered command-only, Caps-Lock-only, and combined half-circle feedback colors follow the pointer and preserve focus");
     return 1;
 }
 static int normal_cases(void) {
