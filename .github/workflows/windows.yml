@@ -1,0 +1,133 @@
+name: Windows build and test
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  windows:
+    name: Windows ${{ matrix.architecture }}
+    runs-on: windows-2022
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        architecture: [x64, x86]
+    defaults:
+      run:
+        shell: pwsh
+        working-directory: typing
+    env:
+      CARGO_TERM_COLOR: always
+      CARGO_INCREMENTAL: '0'
+      TYPING_ARCHITECTURE: ${{ matrix.architecture }}
+
+    steps:
+      - name: Check out Typing
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: typing
+          persist-credentials: false
+
+      - name: Check out pinned InputSim
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: aldetl/InputSim
+          ref: 76158eb38423538e48d43919a71434ce2342bce1
+          path: inputsim
+          persist-credentials: false
+
+      - name: Provision Rust and locked dependency caches
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          if ($LASTEXITCODE) { throw 'Stable Rust provisioning failed' }
+          rustup default stable
+          if ($LASTEXITCODE) { throw 'Selecting stable Rust failed' }
+          cargo fetch --locked --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE) { throw 'Typing dependency provisioning failed' }
+          cargo fetch --manifest-path ../inputsim/Cargo.toml --locked --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE) { throw 'InputSim dependency provisioning failed' }
+          if ($env:TYPING_ARCHITECTURE -eq 'x86') {
+            rustup toolchain install nightly-2026-04-15 --profile minimal --component rust-src --component clippy
+            if ($LASTEXITCODE) { throw 'Windows 7 toolchain provisioning failed' }
+            cargo +nightly-2026-04-15 fetch --locked --target i686-win7-windows-msvc
+            if ($LASTEXITCODE) { throw 'Typing x86 dependency provisioning failed' }
+            cargo +nightly-2026-04-15 fetch --manifest-path ../inputsim/Cargo.toml --locked --target i686-win7-windows-msvc
+            if ($LASTEXITCODE) { throw 'InputSim x86 dependency provisioning failed' }
+            $sysroot = (& rustc +nightly-2026-04-15 --print sysroot).Trim()
+            if ($LASTEXITCODE) { throw 'Cannot locate the Windows 7 toolchain' }
+            $library = Join-Path $sysroot 'lib/rustlib/src/rust/library/Cargo.toml'
+            cargo +nightly-2026-04-15 fetch --manifest-path $library --locked --target i686-win7-windows-msvc
+            if ($LASTEXITCODE) { throw 'Standard library dependency provisioning failed' }
+          }
+
+      - name: Check Typing source and compile native test tools
+        run: ./tools/validate_windows.ps1 -BuildOnly -Architecture $env:TYPING_ARCHITECTURE
+
+      - name: Test and lint InputSim
+        run: |
+          $env:CARGO_TARGET_DIR = Join-Path (Get-Location) 'target/ci-inputsim'
+          $prefix = @()
+          $target = @()
+          if ($env:TYPING_ARCHITECTURE -eq 'x86') {
+            $prefix = @('+nightly-2026-04-15')
+            $target = @('--target', 'i686-win7-windows-msvc', '-Z', 'build-std=std,test,panic_unwind')
+          }
+          cargo @prefix test --manifest-path ../inputsim/Cargo.toml @target --locked --offline
+          if ($LASTEXITCODE) { throw 'InputSim tests failed' }
+          cargo @prefix clippy --manifest-path ../inputsim/Cargo.toml @target --locked --offline --all-targets -- -D warnings
+          if ($LASTEXITCODE) { throw 'InputSim lint checks failed' }
+
+      - name: Build and verify portable package
+        run: ./tools/package_windows.ps1 -Architecture $env:TYPING_ARCHITECTURE
+
+      - name: Record build inputs
+        run: |
+          $locator = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio/Installer/vswhere.exe'
+          $visualStudio = & $locator -latest -products '*' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
+          $toolset = Get-ChildItem -LiteralPath (Join-Path $visualStudio 'VC/Tools/MSVC') -Directory |
+            Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
+          $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10'
+          $sdk = Get-ChildItem -LiteralPath (Join-Path $sdkRoot 'bin') -Directory |
+            Where-Object { Test-Path -LiteralPath (Join-Path $_.FullName 'x64/rc.exe') } |
+            Sort-Object { [version]$_.Name } -Descending | Select-Object -First 1
+          $rust = @(& rustc --version --verbose)
+          if ($env:TYPING_ARCHITECTURE -eq 'x86') {
+            $rust += @(& rustc +nightly-2026-04-15 --version --verbose)
+          }
+          [ordered]@{
+            typingCommit = (& git rev-parse HEAD).Trim()
+            inputSimCommit = (& git -C ../inputsim rev-parse HEAD).Trim()
+            architecture = $env:TYPING_ARCHITECTURE
+            rust = $rust
+            msvcToolset = $toolset.Name
+            windowsSdk = $sdk.Name
+            runnerImage = $env:ImageOS
+            runnerImageVersion = $env:ImageVersion
+            scope = 'Source tests, native tool compilation, package and binary integrity. Desktop and target OS checks are separate.'
+          } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath target/dist/build-environment.json -Encoding utf8
+          git diff --exit-code
+          if ($LASTEXITCODE) { throw 'Checks changed tracked Typing files' }
+          git -C ../inputsim diff --exit-code
+          if ($LASTEXITCODE) { throw 'Checks changed tracked InputSim files' }
+
+      - name: Upload verified package and build evidence
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: windows-${{ matrix.architecture }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            typing/target/dist/Typing-*-win-${{ matrix.architecture }}.zip
+            typing/target/dist/Typing-*-win-${{ matrix.architecture }}.manifest.json
+            typing/target/dist/build-environment.json
