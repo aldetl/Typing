@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="480" height="280" viewBox="0 0 720 420" role="img" aria-labelledby="title description">
+  <title id="title">Default command-mode movement keys</title>
+  <desc id="description">Staggered letter keys: top row U sends Home, I moves up, O sends End, P moves one word right. Bottom row H moves one word left, J moves left, K moves down, L moves right.</desc>
+  <style>
+    .key { fill: #f7f9f6; stroke: #d5dfd8; stroke-width: 2; }
+    .base { fill: #c5d4cb; }
+    .letter { fill: #24352e; font: 600 50px "Segoe UI", Arial, sans-serif; }
+    .action { fill: #55655c; font: 24px "Segoe UI", Arial, sans-serif; }
+  </style>
+  <rect width="720" height="420" rx="12" fill="#ffffff"/>
+  <g text-anchor="middle">
+    <g transform="translate(122 28)">
+      <rect class="base" width="134" height="172" rx="16"/>
+      <rect class="key" width="134" height="166" rx="16"/>
+      <text class="letter" x="67" y="78">U</text>
+      <text class="action" x="67" y="122">Home</text>
+    </g>
+    <g transform="translate(272 28)">
+      <rect class="base" width="134" height="172" rx="16"/>
+      <rect class="key" width="134" height="166" rx="16"/>
+      <text class="letter" x="67" y="78">I</text>
+      <text class="action" x="67" y="122">↑ Up</text>
+    </g>
+    <g transform="translate(422 28)">
+      <rect class="base" width="134" height="172" rx="16"/>
+      <rect class="key" width="134" height="166" rx="16"/>
+      <text class="letter" x="67" y="78">O</text>
+      <text class="action" x="67" y="122">End</text>
+    </g>
+    <g transform="translate(572 28)">
+      <rect class="base" width="134" height="172" rx="16"/>
+      <rect class="key" width="134" height="166" rx="16"/>
+      <text class="letter" x="67" y="78">P</text>
+      <text class="action" x="67" y="122">Word →</text>
+    </g>
+    <g transform="translate(14 220)">
+      <rect class="base" width="134" height="172" rx="16"/>
+      <rect class="key" width="134" height="166" rx="16"/>
+      <text class="letter" x="67" y="78">H</text>
+      <text class="action" x="67" y="122">← Word</text>
+    </g>
+    <g transform="translate(164 220)">
+      <rect class="base" width="134" height="172" rx="16"/>
+      <rect class="key" width="134" height="166" rx="16"/>
+      <text class="letter" x="67" y="78">J</text>
+      <text class="action" x="67" y="122">← Left</text>
+    </g>
+    <g transform="translate(314 220)">
+      <rect class="base" width="134" height="172" rx="16"/>
+      <rect class="key" width="134" height="166" rx="16"/>
+      <text class="letter" x="67" y="78">K</text>
+      <text class="action" x="67" y="122">↓ Down</text>
+    </g>
+    <g transform="translate(464 220)">
+      <rect class="base" width="134" height="172" rx="16"/>
+      <rect class="key" width="134" height="166" rx="16"/>
+      <text class="letter" x="67" y="78">L</text>
+      <text class="action" x="67" y="122">Right →</text>
+    </g>
+  </g>
+</svg>

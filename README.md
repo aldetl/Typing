@@ -2,6 +2,14 @@
 
 Typing is an efficient tool that keeps your hands on the keyboard. It greatly reduces the frequency of switching between the keyboard and mouse while you type. You can use Vim-style command mode or Emacs-style direct shortcuts to move the caret, select text, and run custom commands across applications—without requiring plugins or integration from those applications.
 
+## Move the cursor without leaving the letter keys.
+
+With the default profile, tap and release **Caps Lock** or **Left Alt** alone to enter command mode, then use the keys below. Tap a mode key again or press **G** to resume typing.
+
+![Default command-mode movement keys: U sends Home, I moves up, O sends End, P moves one word right; H moves one word left, J moves left, K moves down, and L moves right.](docs/assets/command-mode-movement.svg)
+
+*Default command-mode movement keys.* Home and End follow the application's cursor behavior.
+
 ## Features
 
 - Keyboard navigation, text selection, editing shortcuts, movement counts, and date/time insertion.
