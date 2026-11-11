@@ -64,6 +64,10 @@ Run source/build checks and compile the native test tools with:
 
 Use `-Architecture x86` for the additional x86 checks. Use `-Portable` instead of `-BuildOnly` to run desktop checks against an extracted package. Desktop checks require an interactive Windows session and can operate application windows and inject test input.
 
+Pull requests run the Windows x64 and x86 build and test checks, including formatting, unit tests, Clippy, native test-tool compilation, and portable package verification. The workflow checks the pinned InputSim source and saves packages and build evidence as run artifacts. Interactive desktop tests and actual target OS checks remain part of release validation.
+
+Make changes on a work branch and open a pull request. After the required checks pass on an up-to-date branch, squash and merge the completed change into `main`.
+
 ## License
 
 Typing is source-available under [Apache License 2.0 with Commons Clause 1.0](LICENSE). Personal and workplace use are permitted under those terms; the Commons Clause restriction on selling applies.
