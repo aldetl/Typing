@@ -72,4 +72,6 @@ Unofficial distributions must include [NOTICE](NOTICE) or identify **Typing** an
 
 InputSim is independently licensed under Apache 2.0 alone. Other dependencies retain their own terms; see [third-party notices](THIRD_PARTY_NOTICES.md).
 
+## Links
+
 [Website](https://xdetail.org/typing) · [Downloads](https://github.com/aldetl/Typing/releases) · [User guide](docs/USER_GUIDE.md)
