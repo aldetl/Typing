@@ -47,6 +47,31 @@ impl fmt::Display for KeyParseError {
 
 impl std::error::Error for KeyParseError {}
 
+impl KeyParseError {
+    pub fn diagnostic(&self) -> crate::Message {
+        crate::msg!(
+            "keys.unknown",
+            "unknown key or chord {key}",
+            key = format!("{:?}", self.0)
+        )
+    }
+}
+impl crate::MessageValue for KeyParseError {
+    fn message_value(&self) -> crate::Message {
+        self.diagnostic()
+    }
+}
+impl crate::MessageValue for Key {
+    fn message_value(&self) -> crate::Message {
+        self.to_string().into()
+    }
+}
+impl crate::MessageValue for Chord {
+    fn message_value(&self) -> crate::Message {
+        self.to_string().into()
+    }
+}
+
 impl FromStr for Key {
     type Err = KeyParseError;
 

@@ -7,6 +7,7 @@ use std::{
     sync::atomic::{AtomicU64, Ordering},
 };
 use typing_core::{BindingGroup, Chord, Command, Config, validate_binding};
+use typing_core::{JoinMessages, Message, msg};
 
 #[derive(Clone, Debug)]
 pub struct Entry {
@@ -24,13 +25,20 @@ pub struct Profile {
     pub name: String,
     pub config: Config,
     pub entries: Vec<Entry>,
-    pub warnings: Vec<String>,
+    pub warnings: Vec<Message>,
 }
 
-fn diagnostics(errors: Vec<typing_core::ConfigError>) -> String {
+fn diagnostics(errors: Vec<typing_core::ConfigError>) -> Message {
     errors
         .into_iter()
-        .map(|e| format!("Line {}: {}", e.line, e.message))
+        .map(|e| {
+            msg!(
+                "profiles.line",
+                "Line {arg0}: {arg1}",
+                arg0 = e.line,
+                arg1 = e.message
+            )
+        })
         .collect::<Vec<_>>()
         .join("\r\n")
 }
@@ -53,7 +61,7 @@ fn global_collision(input: Chord, global: Chord) -> bool {
 }
 
 impl Profile {
-    pub fn parse(text: &str, global_hotkey: Option<Chord>) -> Result<Self, String> {
+    pub fn parse(text: &str, global_hotkey: Option<Chord>) -> Result<Self, Message> {
         let mut sections = BTreeSet::new();
         let mut section = "";
         let mut metadata = BTreeSet::new();
@@ -68,7 +76,14 @@ impl Profile {
         for (index, source) in text.trim_start_matches('\u{feff}').lines().enumerate() {
             let line = source.trim();
             let number = index + 1;
-            let mut error = |message: String| errors.push(format!("Line {number}: {message}"));
+            let mut error = |message: Message| {
+                errors.push(msg!(
+                    "profiles.line_2",
+                    "Line {number}: {message}",
+                    number = number,
+                    message = message
+                ))
+            };
             if line.is_empty() || line.starts_with(';') {
                 enabled_source.push('\n');
                 continue;
@@ -78,15 +93,23 @@ impl Profile {
                 enabled_source.push('\n');
                 section = &line[1..line.len() - 1];
                 if !["profile", "modekeys", "hotkeys"].contains(&section) {
-                    error(format!("unsupported section [{section}]"));
+                    error(msg!(
+                        "profiles.unsupported_section",
+                        "unsupported section [{section}]",
+                        section = section
+                    ));
                 }
                 if !sections.insert(section.to_owned()) {
-                    error(format!("repeated section [{section}]"));
+                    error(msg!(
+                        "profiles.repeated_section",
+                        "repeated section [{section}]",
+                        section = section
+                    ));
                 }
                 continue;
             }
             let Some((input, action)) = line.split_once('=') else {
-                error("expected key=value".into());
+                error(msg!("profiles.expected_key_value", "expected key=value"));
                 continue;
             };
             let (input, action) = (input.trim(), action.trim());
@@ -98,22 +121,38 @@ impl Profile {
             match section {
                 "profile" => {
                     if !metadata.insert(input.to_owned()) {
-                        error(format!("repeated metadata {input}"));
+                        error(msg!(
+                            "profiles.repeated_metadata",
+                            "repeated metadata {input}",
+                            input = input
+                        ));
                     }
                     match input {
                         "name" if !action.is_empty() => name = Some(action.to_owned()),
                         "version" => version = Some(action.to_owned()),
-                        _ => error(format!("unknown or empty metadata {input}")),
+                        _ => error(msg!(
+                            "profiles.unknown_or_empty_metadata",
+                            "unknown or empty metadata {input}",
+                            input = input
+                        )),
                     }
                 }
                 "modekeys" | "hotkeys" => {
                     match validate_binding(input.strip_prefix('!').unwrap_or(input), action) {
                         Ok((chord, command)) => {
                             if !chords.insert((section.to_owned(), chord)) {
-                                error(format!("duplicate trigger {chord} in [{section}]"));
+                                error(msg!(
+                                    "profiles.duplicate_trigger_in",
+                                    "duplicate trigger {chord} in [{section}]",
+                                    chord = chord,
+                                    section = section
+                                ));
                             }
                             if section == "hotkeys" && command == Command::ModeKey {
-                                error("mode declarations belong in [modekeys]".into());
+                                error(msg!(
+                                    "profiles.mode_declarations_belong_in_modekeys",
+                                    "mode declarations belong in [modekeys]"
+                                ));
                             }
                             entries.push(Entry {
                                 line: number,
@@ -128,28 +167,39 @@ impl Profile {
                         Err(message) => error(message),
                     }
                 }
-                _ => error("entry outside a supported section".into()),
+                _ => error(msg!(
+                    "profiles.entry_outside_a_supported_section",
+                    "entry outside a supported section"
+                )),
             }
         }
         for required in ["profile", "modekeys", "hotkeys"] {
             if !sections.contains(required) {
-                errors.push(format!("Missing [{required}] section"));
+                errors.push(msg!(
+                    "profiles.missing_section",
+                    "Missing [{required}] section",
+                    required = required
+                ));
             }
         }
         if name.is_none() {
-            errors.push("Missing profile name".into());
+            errors.push(msg!(
+                "profiles.missing_profile_name",
+                "Missing profile name"
+            ));
         }
         if !matches!(version.as_deref(), Some("1" | "2")) {
-            errors.push(
+            errors.push(msg!(
+                "profiles.expected_profile_version_or_version_unsupported",
                 "Expected profile version=1 or version=2; unsupported versions are not rewritten"
-                    .into(),
-            );
+            ));
         }
         if version.as_deref() == Some("1") {
             for entry in entries.iter().filter(|entry| !entry.enabled) {
-                errors.push(format!(
-                    "Line {}: disabled mappings require profile version=2",
-                    entry.line
+                errors.push(msg!(
+                    "profiles.line_disabled_mappings_require_profile_version",
+                    "Line {arg0}: disabled mappings require profile version=2",
+                    arg0 = entry.line
                 ));
             }
         }
@@ -166,24 +216,30 @@ impl Profile {
                 && config.mode_keys().is_empty()
                 && entry.command != Command::ModeKey
             {
-                warnings.push(format!("Line {}: command mode has no mode key", entry.line));
+                warnings.push(msg!(
+                    "profiles.line_command_mode_has_no_mode",
+                    "Line {arg0}: command mode has no mode key",
+                    arg0 = entry.line
+                ));
             }
             if global_hotkey.is_some_and(|global| global_collision(entry.chord, global)) {
-                warnings.push(format!(
-                    "Line {}: conflicts with the global toggle",
-                    entry.line
+                warnings.push(msg!(
+                    "profiles.line_conflicts_with_the_global_toggle",
+                    "Line {arg0}: conflicts with the global toggle",
+                    arg0 = entry.line
                 ));
             }
             if entries.iter().any(|other| {
                 other.enabled && other.section != entry.section && other.chord == entry.chord
             }) {
                 let effective = config.binding(entry.chord).unwrap();
-                warnings.push(format!(
-                    "Line {}: shared trigger {}; effective {:?}: {}",
-                    entry.line,
-                    entry.chord,
-                    effective.group,
-                    effective.command.label()
+                warnings.push(msg!(
+                    "profiles.line_shared_trigger_effective",
+                    "Line {arg0}: shared trigger {arg1}; effective {arg2}: {arg3}",
+                    arg0 = entry.line,
+                    arg1 = entry.chord,
+                    arg2 = effective.group,
+                    arg3 = effective.command.label()
                 ));
             }
         }
@@ -195,7 +251,7 @@ impl Profile {
         })
     }
 
-    pub fn import_legacy(text: &str, name: &str) -> Result<String, String> {
+    pub fn import_legacy(text: &str, name: &str) -> Result<String, Message> {
         let legacy = Config::parse(text).map_err(diagnostics)?;
         let mut source = format!(
             "[profile]\r\nversion=1\r\nname={}\r\n\r\n[modekeys]\r\n",
@@ -242,36 +298,52 @@ impl Profile {
                 binding
                     .map(|binding| {
                         let scope = match binding.group {
-                            BindingGroup::CommandMode => "command mode",
-                            BindingGroup::Always => "both enabled modes",
+                            BindingGroup::CommandMode => {
+                                msg!("profiles.command_mode", "command mode")
+                            }
+                            BindingGroup::Always => {
+                                msg!("profiles.both_enabled_modes", "both enabled modes")
+                            }
                         };
-                        format!("{scope}: {}", binding.command.label())
+                        msg!(
+                            "profiles.detail",
+                            "{scope}: {arg0}",
+                            scope = scope,
+                            arg0 = binding.command.label()
+                        )
                     })
-                    .unwrap_or_else(|| "no mapping".into())
+                    .unwrap_or_else(|| msg!("profiles.no_mapping", "no mapping"))
             };
             let differences = chords
                 .into_iter()
                 .filter(|chord| legacy.binding(*chord) != imported.config.binding(*chord))
                 .map(|chord| {
-                    format!(
-                        "{chord}: legacy [{}]; profile [{}]",
-                        describe(legacy.binding(chord)),
-                        describe(imported.config.binding(chord))
+                    msg!(
+                        "profiles.legacy_profile",
+                        "{chord}: legacy [{arg0}]; profile [{arg1}]",
+                        chord = chord,
+                        arg0 = describe(legacy.binding(chord)),
+                        arg1 = describe(imported.config.binding(chord))
                     )
                 })
                 .collect::<Vec<_>>()
                 .join("\r\n");
-            return Err(format!(
-                "Legacy mappings cannot be represented equivalently:\r\n{differences}\r\nResolve these entries in the legacy file before importing. The original file was not changed."
+            return Err(msg!(
+                "profiles.legacy_mappings_cannot_be_represented_equivalently",
+                "Legacy mappings cannot be represented equivalently:\r\n{differences}\r\nResolve these entries in the legacy file before importing. The original file was not changed.",
+                differences = differences
             ));
         }
         Ok(source)
     }
 }
 
-fn clean_name(name: &str) -> Result<&str, String> {
+fn clean_name(name: &str) -> Result<&str, Message> {
     if name.trim().is_empty() || name.contains(['\r', '\n']) {
-        Err("Profile name must be nonempty and on one line".into())
+        Err(msg!(
+            "profiles.profile_name_must_be_nonempty_and",
+            "Profile name must be nonempty and on one line"
+        ))
     } else {
         Ok(name.trim())
     }
@@ -299,13 +371,32 @@ impl Document {
             fingerprint: None,
         }
     }
-    pub fn open(path: &Path, hotkey: Option<Chord>) -> Result<Self, String> {
+    pub fn open(path: &Path, hotkey: Option<Chord>) -> Result<Self, Message> {
         let path = std::path::absolute(path).map_err(|e| e.to_string())?;
-        let bytes = fs::read(&path).map_err(|e| format!("Read {}: {e}", path.display()))?;
-        let text = String::from_utf8(bytes.clone())
-            .map_err(|e| format!("Read {}: {e}", path.display()))?;
-        Profile::parse(&text, hotkey)
-            .map_err(|e| format!("Validate {}:\r\n{e}", path.display()))?;
+        let bytes = fs::read(&path).map_err(|e| {
+            msg!(
+                "profiles.read",
+                "Read {arg0}: {e}",
+                arg0 = path.display(),
+                e = e
+            )
+        })?;
+        let text = String::from_utf8(bytes.clone()).map_err(|e| {
+            msg!(
+                "profiles.read",
+                "Read {arg0}: {e}",
+                arg0 = path.display(),
+                e = e
+            )
+        })?;
+        Profile::parse(&text, hotkey).map_err(|e| {
+            msg!(
+                "profiles.validate",
+                "Validate {arg0}:\r\n{e}",
+                arg0 = path.display(),
+                e = e
+            )
+        })?;
         Ok(Self {
             baseline: text.clone(),
             text,
@@ -319,7 +410,7 @@ impl Document {
     pub fn discard(&mut self) {
         self.text = self.baseline.clone();
     }
-    pub fn rename(&mut self, name: &str) -> Result<(), String> {
+    pub fn rename(&mut self, name: &str) -> Result<(), Message> {
         let name = clean_name(name)?;
         let mut section = "";
         let line = self
@@ -336,7 +427,7 @@ impl Document {
                         .split_once('=')
                         .is_some_and(|(key, _)| key.trim() == "name")
             })
-            .ok_or("Missing profile name")?;
+            .ok_or_else(|| msg!("profiles.missing_profile_name", "Missing profile name"))?;
         self.replace_line(line + 1, Some(&format!("name={name}")));
         Ok(())
     }
@@ -367,13 +458,18 @@ impl Document {
         number: usize,
         enabled: bool,
         hotkey: Option<Chord>,
-    ) -> Result<(), String> {
+    ) -> Result<(), Message> {
         let profile = Profile::parse(&self.text, hotkey)?;
         let entry = profile
             .entries
             .iter()
             .find(|e| e.line == number)
-            .ok_or("Select a mapping to change its enabled state")?;
+            .ok_or_else(|| {
+                msg!(
+                    "profiles.select_a_mapping_to_change_its",
+                    "Select a mapping to change its enabled state"
+                )
+            })?;
         if entry.enabled == enabled {
             return Ok(());
         }
@@ -418,9 +514,12 @@ impl Document {
         input: &str,
         action: &str,
         hotkey: Option<Chord>,
-    ) -> Result<usize, String> {
+    ) -> Result<usize, Message> {
         if !["modekeys", "hotkeys"].contains(&section) {
-            return Err("Invalid mapping type".into());
+            return Err(msg!(
+                "profiles.invalid_mapping_type",
+                "Invalid mapping type"
+            ));
         }
         let (chord, command) = validate_binding(input.trim(), action.trim())?;
         let mut candidate = self.clone();
@@ -450,7 +549,12 @@ impl Document {
                     break;
                 }
             }
-            let offset = insert.ok_or("Missing mapping section")?;
+            let offset = insert.ok_or_else(|| {
+                msg!(
+                    "profiles.missing_mapping_section",
+                    "Missing mapping section"
+                )
+            })?;
             let eol = if candidate.text.contains("\r\n") {
                 "\r\n"
             } else {
@@ -479,7 +583,7 @@ impl Document {
         path: &Path,
         overwrite: bool,
         hotkey: Option<Chord>,
-    ) -> Result<(), String> {
+    ) -> Result<(), Message> {
         Profile::parse(&self.text, hotkey)?;
         let path = std::path::absolute(path).map_err(|e| e.to_string())?;
         let expected = if self
@@ -508,7 +612,7 @@ pub struct AvailableProfile {
 #[derive(Default)]
 pub struct Catalog {
     pub profiles: Vec<AvailableProfile>,
-    pub diagnostics: Vec<String>,
+    pub diagnostics: Vec<Message>,
 }
 
 /// A single, nonrecursive profile directory. External Save As destinations never
@@ -542,15 +646,19 @@ impl Library {
             Ok(files) => files,
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => return catalog,
             Err(error) => {
-                catalog
-                    .diagnostics
-                    .push(format!("Discover profiles: {error}"));
+                catalog.diagnostics.push(msg!(
+                    "profiles.discover_profiles",
+                    "Discover profiles: {error}",
+                    error = error
+                ));
                 return catalog;
             }
         };
         for file in files {
             let result = (|| {
-                let file = file.map_err(|e| format!("Discover profile: {e}"))?;
+                let file = file.map_err(|e| {
+                    msg!("profiles.discover_profile", "Discover profile: {e}", e = e)
+                })?;
                 let path = file.path();
                 if !file.file_type().map_err(|e| e.to_string())?.is_file()
                     || !path
@@ -560,9 +668,10 @@ impl Library {
                     return Ok(None);
                 }
                 let name = file.file_name().to_string_lossy().into_owned();
-                let source = fs::read_to_string(&path).map_err(|e| format!("Read {name}: {e}"))?;
-                let profile =
-                    Profile::parse(&source, hotkey).map_err(|e| format!("{name}: {e}"))?;
+                let source = fs::read_to_string(&path)
+                    .map_err(|e| msg!("profiles.read_2", "Read {name}: {e}", name = name, e = e))?;
+                let profile = Profile::parse(&source, hotkey)
+                    .map_err(|e| msg!("profiles.detail_2", "{name}: {e}", name = name, e = e))?;
                 Ok(Some(AvailableProfile {
                     name: profile.name,
                     path,
@@ -579,9 +688,10 @@ impl Library {
             .sort_by_key(|p| (p.name.to_lowercase(), p.path.clone()));
         for pair in catalog.profiles.windows(2) {
             if pair[0].name.to_lowercase() == pair[1].name.to_lowercase() {
-                catalog.diagnostics.push(format!(
-                    "Duplicate profile name: {}. Rename a profile to distinguish them.",
-                    pair[0].name
+                catalog.diagnostics.push(msg!(
+                    "profiles.duplicate_profile_name_rename_a_profile",
+                    "Duplicate profile name: {arg0}. Rename a profile to distinguish them.",
+                    arg0 = pair[0].name
                 ));
             }
         }
@@ -593,15 +703,17 @@ impl Library {
         name: &str,
         except: Option<&Path>,
         hotkey: Option<Chord>,
-    ) -> Result<String, String> {
+    ) -> Result<String, Message> {
         let name = clean_name(name)?;
         let catalog = self.scan(hotkey);
         if catalog.profiles.iter().any(|p| {
             p.name.to_lowercase() == name.to_lowercase()
                 && !except.is_some_and(|path| same_file(path, &p.path))
         }) {
-            return Err(format!(
-                "A profile named {name} already exists. Choose a different name."
+            return Err(msg!(
+                "profiles.a_profile_named_already_exists_choose",
+                "A profile named {name} already exists. Choose a different name.",
+                name = name
             ));
         }
         Ok(name.into())
@@ -612,7 +724,7 @@ impl Library {
             .is_some_and(|parent| same_file(parent, &self.directory))
     }
 
-    pub fn destination(&self, name: &str, hotkey: Option<Chord>) -> Result<PathBuf, String> {
+    pub fn destination(&self, name: &str, hotkey: Option<Chord>) -> Result<PathBuf, Message> {
         self.check_name(name, None, hotkey)?;
         // A prefix avoids reserved Windows device names. Display names stay
         // independent of filenames, including after a Rename.
@@ -627,8 +739,13 @@ impl Library {
                 }
             })
             .collect();
-        fs::create_dir_all(&self.directory)
-            .map_err(|e| format!("Create profiles directory: {e}"))?;
+        fs::create_dir_all(&self.directory).map_err(|e| {
+            msg!(
+                "profiles.create_profiles_directory",
+                "Create profiles directory: {e}",
+                e = e
+            )
+        })?;
         for suffix in 0..10000 {
             let name = if suffix == 0 {
                 format!("profile-{stem}.typing.ini")
@@ -640,7 +757,10 @@ impl Library {
                 return Ok(path);
             }
         }
-        Err("Cannot choose an unused profile filename".into())
+        Err(msg!(
+            "profiles.cannot_choose_an_unused_profile_filename",
+            "Cannot choose an unused profile filename"
+        ))
     }
 
     pub fn save(
@@ -649,7 +769,7 @@ impl Library {
         path: &Path,
         overwrite: bool,
         hotkey: Option<Chord>,
-    ) -> Result<(), String> {
+    ) -> Result<(), Message> {
         if self.contains(path) {
             self.check_name(
                 &Profile::parse(&document.text, hotkey)?.name,
@@ -660,13 +780,18 @@ impl Library {
         document.save(path, overwrite, hotkey)
     }
 
-    pub fn remove(&self, document: &Document, active: Option<&Path>) -> Result<(), String> {
-        let path = document
-            .path
-            .as_deref()
-            .ok_or("Save the profile before deleting it")?;
+    pub fn remove(&self, document: &Document, active: Option<&Path>) -> Result<(), Message> {
+        let path = document.path.as_deref().ok_or_else(|| {
+            msg!(
+                "profiles.save_the_profile_before_deleting_it",
+                "Save the profile before deleting it"
+            )
+        })?;
         if !self.contains(path) {
-            return Err("Only profiles in the default directory can be deleted".into());
+            return Err(msg!(
+                "profiles.only_profiles_in_the_default_directory",
+                "Only profiles in the default directory can be deleted"
+            ));
         }
         if !path
             .extension()
@@ -676,19 +801,38 @@ impl Library {
                 .file_type()
                 .is_file()
         {
-            return Err("Only available profile files can be deleted".into());
+            return Err(msg!(
+                "profiles.only_available_profile_files_can_be",
+                "Only available profile files can be deleted"
+            ));
         }
         if active.is_some_and(|active| same_file(active, path)) {
-            return Err("Switch to a different profile before deleting the active profile".into());
+            return Err(msg!(
+                "profiles.switch_to_a_different_profile_before",
+                "Switch to a different profile before deleting the active profile"
+            ));
         }
         if document.dirty() {
-            return Err("Resolve unsaved changes before deleting the profile".into());
+            return Err(msg!(
+                "profiles.resolve_unsaved_changes_before_deleting_the",
+                "Resolve unsaved changes before deleting the profile"
+            ));
         }
-        let current = fs::read(path).map_err(|e| format!("Read profile before deletion: {e}"))?;
+        let current = fs::read(path).map_err(|e| {
+            msg!(
+                "profiles.read_profile_before_deletion",
+                "Read profile before deletion: {e}",
+                e = e
+            )
+        })?;
         if Some(current.as_slice()) != document.fingerprint.as_deref() {
-            return Err("External change: reload the profile before deleting it".into());
+            return Err(msg!(
+                "profiles.external_change_reload_the_profile_before",
+                "External change: reload the profile before deleting it"
+            ));
         }
-        fs::remove_file(path).map_err(|e| format!("Delete profile: {e}"))
+        fs::remove_file(path)
+            .map_err(|e| msg!("profiles.delete_profile", "Delete profile: {e}", e = e))
     }
 }
 
@@ -697,7 +841,7 @@ pub fn import_document(
     profile_file: bool,
     name: &str,
     hotkey: Option<Chord>,
-) -> Result<Document, String> {
+) -> Result<Document, Message> {
     let mut document = if profile_file
         || source
             .trim_start_matches('\u{feff}')
@@ -722,24 +866,34 @@ pub fn guarded_write(
     bytes: &[u8],
     expected: Option<&[u8]>,
     overwrite: bool,
-) -> Result<(), String> {
+) -> Result<(), Message> {
     let read = || match fs::read(path) {
         Ok(bytes) => Ok(Some(bytes)),
         Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
-        Err(e) => Err(format!("Read {}: {e}", path.display())),
+        Err(e) => Err(msg!(
+            "profiles.read",
+            "Read {arg0}: {e}",
+            arg0 = path.display(),
+            e = e
+        )),
     };
     let original = read()?;
     if !overwrite && original.as_deref() != expected {
-        return Err(format!(
-            "External change: {}. Reload, Save As, or explicitly overwrite.",
-            path.display()
+        return Err(msg!(
+            "profiles.external_change_reload_save_as_or",
+            "External change: {arg0}. Reload, Save As, or explicitly overwrite.",
+            arg0 = path.display()
         ));
     }
     if original.as_deref() == Some(bytes) {
         return Ok(());
     }
     if path.metadata().is_ok_and(|m| m.permissions().readonly()) {
-        return Err(format!("Save {}: destination is read-only", path.display()));
+        return Err(msg!(
+            "profiles.save_destination_is_read_only",
+            "Save {arg0}: destination is read-only",
+            arg0 = path.display()
+        ));
     }
     let temp = path.with_file_name(format!(
         ".typing-{}-{}.tmp",
@@ -751,25 +905,62 @@ pub fn guarded_write(
             .write(true)
             .create_new(true)
             .open(&temp)
-            .map_err(|e| format!("Prepare {}: {e}", temp.display()))?;
+            .map_err(|e| {
+                msg!(
+                    "profiles.prepare",
+                    "Prepare {arg0}: {e}",
+                    arg0 = temp.display(),
+                    e = e
+                )
+            })?;
         file.write_all(bytes)
             .and_then(|()| file.sync_all())
-            .map_err(|e| format!("Prepare {}: {e}", temp.display()))?;
+            .map_err(|e| {
+                msg!(
+                    "profiles.prepare",
+                    "Prepare {arg0}: {e}",
+                    arg0 = temp.display(),
+                    e = e
+                )
+            })?;
         drop(file);
         if read()? != original {
-            return Err("External change while preparing save; reload or retry with an explicit overwrite decision".into());
+            return Err(msg!(
+                "profiles.external_change_while_preparing_save_reload",
+                "External change while preparing save; reload or retry with an explicit overwrite decision"
+            ));
         }
         if let Some(old) = original {
             let mut backup_name = path.as_os_str().to_os_string();
             backup_name.push(".bak");
             let backup = PathBuf::from(backup_name);
-            let mut file = fs::File::create(&backup)
-                .map_err(|e| format!("Backup {}: {e}", backup.display()))?;
+            let mut file = fs::File::create(&backup).map_err(|e| {
+                msg!(
+                    "profiles.backup",
+                    "Backup {arg0}: {e}",
+                    arg0 = backup.display(),
+                    e = e
+                )
+            })?;
             file.write_all(&old)
                 .and_then(|()| file.sync_all())
-                .map_err(|e| format!("Backup {}: {e}", backup.display()))?;
+                .map_err(|e| {
+                    msg!(
+                        "profiles.backup",
+                        "Backup {arg0}: {e}",
+                        arg0 = backup.display(),
+                        e = e
+                    )
+                })?;
         }
-        fs::rename(&temp, path).map_err(|e| format!("Replace {}: {e}", path.display()))
+        fs::rename(&temp, path).map_err(|e| {
+            msg!(
+                "profiles.replace",
+                "Replace {arg0}: {e}",
+                arg0 = path.display(),
+                e = e
+            )
+        })
     })();
     if result.is_err() {
         let _ = fs::remove_file(&temp);
@@ -786,13 +977,19 @@ pub struct Application {
 }
 
 impl Application {
-    pub fn read(path: &Path) -> Result<Self, String> {
+    pub fn read(path: &Path) -> Result<Self, Message> {
         let path = std::path::absolute(path).map_err(|e| e.to_string())?;
-        let source = fs::read_to_string(&path)
-            .map_err(|e| format!("Read application configuration {}: {e}", path.display()))?;
+        let source = fs::read_to_string(&path).map_err(|e| {
+            msg!(
+                "profiles.read_application_configuration",
+                "Read application configuration {arg0}: {e}",
+                arg0 = path.display(),
+                e = e
+            )
+        })?;
         Self::parse(path, source)
     }
-    pub fn parse(path: PathBuf, source: String) -> Result<Self, String> {
+    pub fn parse(path: PathBuf, source: String) -> Result<Self, Message> {
         let mut section = "";
         let mut filtered = String::new();
         let mut active = None;
@@ -831,7 +1028,7 @@ impl Application {
             selected,
         })
     }
-    pub fn remember(&mut self, profile: &Path) -> Result<(), String> {
+    pub fn remember(&mut self, profile: &Path) -> Result<(), Message> {
         let base = self.path.parent().unwrap();
         let stored = profile
             .strip_prefix(base)
@@ -894,13 +1091,14 @@ pub struct Candidate {
     pub replace_editor: bool,
 }
 
+#[derive(Clone)]
 pub struct Activation {
     pub application: Application,
     pub active: Option<Candidate>,
     pub pending: Option<Candidate>,
     pub completed: Option<Candidate>,
     pub valid: bool,
-    pub error: Option<String>,
+    pub error: Option<Message>,
 }
 
 impl Activation {
@@ -922,7 +1120,7 @@ impl Activation {
                 .is_some_and(|active| active.document.text == document.text)
     }
 
-    pub fn load(application: Application) -> Result<(Self, Config), String> {
+    pub fn load(application: Application) -> Result<(Self, Config), Message> {
         let mut this = Self {
             application,
             active: None,
@@ -956,12 +1154,18 @@ impl Activation {
         };
         Ok((this, config))
     }
-    pub fn prepare(&mut self, document: Document, replace_editor: bool) -> Result<(), String> {
+    pub fn prepare(&mut self, document: Document, replace_editor: bool) -> Result<(), Message> {
         if self.pending.is_some() || self.completed.is_some() {
-            return Err("A profile operation is already in progress".into());
+            return Err(msg!(
+                "profiles.a_profile_operation_is_already_in",
+                "A profile operation is already in progress"
+            ));
         }
         if document.path.is_none() || document.dirty() {
-            return Err("Save the profile before activating it".into());
+            return Err(msg!(
+                "profiles.save_the_profile_before_activating_it",
+                "Save the profile before activating it"
+            ));
         }
         let profile = Profile::parse(&document.text, self.application.settings.global_hotkey)?;
         self.pending = Some(Candidate {
@@ -972,7 +1176,7 @@ impl Activation {
         self.error = None;
         Ok(())
     }
-    pub fn cancel(&mut self, error: impl Into<String>) {
+    pub fn cancel(&mut self, error: impl Into<Message>) {
         if self.pending.take().is_some() {
             self.error = Some(error.into());
         }
@@ -989,14 +1193,14 @@ impl Activation {
         self.completed = Some(candidate);
         Some(config)
     }
-    pub fn name(&self) -> &str {
+    pub fn name(&self) -> Message {
         self.active
             .as_ref()
-            .map(|c| c.profile.name.as_str())
+            .map(|c| Message::from(c.profile.name.clone()))
             .unwrap_or(if self.valid {
-                "Legacy configuration"
+                msg!("profiles.legacy_name", "Legacy configuration")
             } else {
-                "No valid profile"
+                msg!("profiles.no_valid_name", "No valid profile")
             })
     }
 }
@@ -1006,7 +1210,7 @@ pub struct Recorder {
     held: BTreeSet<typing_core::Key>,
     order: Vec<typing_core::Key>,
     pub chord: Option<String>,
-    pub error: Option<String>,
+    pub error: Option<Message>,
 }
 
 impl Recorder {
@@ -1036,7 +1240,10 @@ impl Recorder {
                     .iter()
                     .any(|key| !modifiers.contains(&key.code()))
                 {
-                    self.error = Some("Only modifiers may precede the final key; this gesture cannot be represented".into());
+                    self.error = Some(msg!(
+                        "profiles.only_modifiers_may_precede_the_final",
+                        "Only modifiers may precede the final key; this gesture cannot be represented"
+                    ));
                 } else if text.parse::<Chord>().is_ok() {
                     self.chord = Some(text);
                 }
@@ -1448,12 +1655,12 @@ mod tests {
         let binding = profile.config.binding("J".parse().unwrap()).unwrap();
         assert_eq!(binding.group, BindingGroup::Always);
         assert_eq!(binding.command, Command::Date);
-        assert!(
-            profile
-                .warnings
-                .iter()
-                .any(|w| w.contains("effective Always: date"))
-        );
+        assert!(profile.warnings.iter().any(|w| {
+            w.argument("arg2")
+                .is_some_and(|group| group.has_id("binding.both_modes"))
+                && w.argument("arg3")
+                    .is_some_and(|action| action.has_id("command.date"))
+        }));
         assert!(profile.warnings.iter().any(|w| w.contains("global toggle")));
     }
     #[test]

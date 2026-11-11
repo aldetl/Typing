@@ -4,7 +4,7 @@ Typing lets you navigate and edit in the foreground application using configurab
 
 ## Get started
 
-1. Extract the portable ZIP into a folder. Keep `Typing.exe`, `inputsim.dll`, `configuration.ini`, and the `profiles` folder together.
+1. Extract the portable ZIP into a folder. Keep `Typing.exe`, `inputsim.dll`, `configuration.ini`, and the `profiles` and `languages` folders together.
 2. Quit any older Typing or Aldetl instance using the same global toggle shortcut.
 3. Run `Typing.exe`. Typing starts enabled in the Windows notification area (the tray); its main window stays hidden.
 4. Open a text editor and place the cursor in some text.
@@ -119,6 +119,10 @@ If editing a profile file directly, use `Trigger=Action`. For example, `LMenu+C=
 In version 2, `!J=Left` keeps the mapping disabled; `J=Left` enables it. A line beginning with `;` is a comment and does not appear as an editable mapping. Use the Enabled state to retain mappings you want to switch on again. For a movement step, choose **Step count** with a positive integer in the editor; the file notation is `stepN`, for example `F=step1`.
 
 ## Change application preferences
+
+In **Settings**, choose **System default**, **English**, or **简体中文** from **Language**. The interface changes immediately, preserving mapping edits and the running mappings. Typing remembers the selection per user in `%LOCALAPPDATA%\Typing\language.txt`. A failed language change preserves the previous selection and displays an error; startup uses English if a saved language profile cannot be loaded.
+
+Language profiles are UTF-8 `.ini` files in the app's `languages` folder, separate from mapping profiles. Their stable message IDs can be translated without rebuilding Typing. Missing translations use English. The matching `.md` file supplies the full guide; a missing guide uses the English guide. Files are loaded at startup and when choosing a different language. After editing the current language file, switch away and back or restart to reload it. System-language changes take effect on the next launch or after switching away from and back to System default. Language selection does not change keyboard layout, the input method, profile notation, or date/time command output. System-managed dialog buttons and Windows error descriptions may remain in the Windows language.
 
 Open **Settings** and check **Start with Windows** to start Typing in the system tray when you sign in. Uncheck it to cancel automatic startup. Changes take effect immediately without Save or Apply, and affect only your Windows user account. The option is off until you enable it. Changing it does not stop the running app or change your mappings.
 

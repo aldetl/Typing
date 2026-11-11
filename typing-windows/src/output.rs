@@ -1,10 +1,11 @@
 use crate::inputsim::{Character, DOWN, Event, UP};
 use typing_core::Key;
+use typing_core::{JoinMessages, Message, msg};
 
 pub trait Backend {
-    fn key(&mut self, key: Key) -> Result<Event, String>;
-    fn character(&mut self, character: char) -> Result<Character, String>;
-    fn submit(&mut self, event: Event, direction: u32) -> Result<(), String>;
+    fn key(&mut self, key: Key) -> Result<Event, Message>;
+    fn character(&mut self, character: char) -> Result<Character, Message>;
+    fn submit(&mut self, event: Event, direction: u32) -> Result<(), Message>;
 }
 
 /// The worker retains these exact values until their releases succeed.
@@ -29,14 +30,17 @@ impl<B: Backend> Output<B> {
     pub fn held_events(&self) -> &[Event] {
         &self.held
     }
-    pub fn begin(&mut self) -> Result<(), String> {
+    pub fn begin(&mut self) -> Result<(), Message> {
         if !self.held.is_empty() {
-            return Err("outstanding releases prevent output".into());
+            return Err(msg!(
+                "output.outstanding_releases_prevent_output",
+                "outstanding releases prevent output"
+            ));
         }
         self.failed.clear();
         Ok(())
     }
-    pub fn down(&mut self, event: Event) -> Result<(), String> {
+    pub fn down(&mut self, event: Event) -> Result<(), Message> {
         if self.held.contains(&event) {
             return Ok(());
         }
@@ -44,7 +48,7 @@ impl<B: Backend> Output<B> {
         self.held.push(event);
         Ok(())
     }
-    pub fn up(&mut self, event: Event) -> Result<(), String> {
+    pub fn up(&mut self, event: Event) -> Result<(), Message> {
         let Some(index) = self.held.iter().rposition(|held| *held == event) else {
             return Ok(());
         };
@@ -61,7 +65,7 @@ impl<B: Backend> Output<B> {
     }
     /// Cleanup attempts every remaining release once, preserving failed values.
     /// Only an explicit lifecycle retry includes a release already rejected.
-    pub fn cleanup(&mut self, explicit_retry: bool) -> Result<(), String> {
+    pub fn cleanup(&mut self, explicit_retry: bool) -> Result<(), Message> {
         if explicit_retry {
             self.failed.clear();
         }
@@ -77,10 +81,11 @@ impl<B: Backend> Output<B> {
         if self.held.is_empty() {
             Ok(())
         } else {
-            Err(format!(
-                "{} outstanding releases, {}",
-                self.held.len(),
-                errors.join(", ")
+            Err(msg!(
+                "output.outstanding_releases",
+                "{arg0} outstanding releases, {arg1}",
+                arg0 = self.held.len(),
+                arg1 = errors.join(", ")
             ))
         }
     }
@@ -95,13 +100,13 @@ mod tests {
         calls: Vec<(Event, u32)>,
     }
     impl Backend for Fake {
-        fn key(&mut self, _: Key) -> Result<Event, String> {
+        fn key(&mut self, _: Key) -> Result<Event, Message> {
             unreachable!()
         }
-        fn character(&mut self, _: char) -> Result<Character, String> {
+        fn character(&mut self, _: char) -> Result<Character, Message> {
             unreachable!()
         }
-        fn submit(&mut self, event: Event, direction: u32) -> Result<(), String> {
+        fn submit(&mut self, event: Event, direction: u32) -> Result<(), Message> {
             self.calls.push((event, direction));
             if self.outcomes.pop_front().unwrap_or(true) {
                 Ok(())

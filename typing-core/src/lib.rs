@@ -32,6 +32,8 @@
 mod config;
 mod engine;
 mod keys;
+mod message;
+pub use message::{JoinMessages, Message, MessageValue};
 
 pub use config::{Binding, BindingGroup, Command, Config, ConfigError, validate_binding};
 pub use engine::{

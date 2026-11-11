@@ -8,10 +8,12 @@ compile_error!("The Windows host requires Windows x86 or x64.");
 mod compatibility;
 mod desktop;
 mod inputsim;
+mod language;
 mod logging;
 mod output;
 mod startup;
 mod ui;
+use typing_core::{JoinMessages, Message, MessageValue, msg};
 
 use inputsim::{Character, DOWN, Event, InputSim, UP};
 use output::{Backend, Output};
@@ -50,8 +52,11 @@ fn modifier_keys() -> [Key; 8] {
     MODIFIER_CODES.map(|code| Key::from_code(code).unwrap())
 }
 
-fn wide(text: &str) -> Vec<u16> {
-    text.encode_utf16().chain(Some(0)).collect()
+fn wide(text: &(impl MessageValue + ?Sized)) -> Vec<u16> {
+    language::render(&Message::value(text))
+        .encode_utf16()
+        .chain(Some(0))
+        .collect()
 }
 fn modifier(key: Key) -> bool {
     MODIFIER_CODES.contains(&key.code())
@@ -114,9 +119,10 @@ impl Shared {
     fn lifecycle(&self, next: Lifecycle) {
         let mut state = self.state.lock().unwrap();
         if next == Lifecycle::Quit {
-            state
-                .profiles
-                .cancel("Profile activation cancelled by Quit");
+            state.profiles.cancel(msg!(
+                "main.profile_activation_cancelled_by_quit",
+                "Profile activation cancelled by Quit"
+            ));
         }
         if matches!(
             next,
@@ -128,7 +134,10 @@ impl Shared {
         if next == Lifecycle::Enable && !state.profiles.valid && state.profiles.pending.is_none() {
             drop(state);
             self.status(
-                "Open or create a valid profile before enabling keyboard commands",
+                &msg!(
+                    "main.open_or_create_a_valid_profile",
+                    "Open or create a valid profile before enabling keyboard commands"
+                ),
                 false,
                 true,
             );
@@ -149,9 +158,10 @@ impl Shared {
         let mut state = self.state.lock().unwrap();
         let changed = state.host.recover(paused, new_cycle);
         if paused || changed {
-            state
-                .profiles
-                .cancel("Profile activation cancelled by desktop pause");
+            state.profiles.cancel(msg!(
+                "main.profile_activation_cancelled_by_desktop_pause",
+                "Profile activation cancelled by desktop pause"
+            ));
             state.recorder = None;
             self.record_owner.store(0, Ordering::SeqCst);
         }
@@ -164,13 +174,14 @@ impl Shared {
             );
         }
     }
-    fn status(&self, text: &str, quit: bool, failed: bool) {
+    fn status(&self, text: &(impl MessageValue + ?Sized), quit: bool, failed: bool) {
+        let text = Message::value(text);
         if failed {
             logging::error("lifecycle", format_args!("{text}"));
         } else {
             logging::info("lifecycle", format_args!("{text}"));
         }
-        let notice = Box::into_raw(Box::new((text.to_string(), quit, failed)));
+        let notice = Box::into_raw(Box::new((text, quit, failed)));
         if unsafe {
             PostMessageW(
                 self.main_window.load(Ordering::SeqCst) as HWND,
@@ -189,16 +200,16 @@ impl Shared {
 
 static SHARED: OnceLock<Arc<Shared>> = OnceLock::new();
 
-type Work = Box<dyn FnOnce() -> Result<(), String> + Send>;
+type Work = Box<dyn FnOnce() -> Result<(), Message> + Send>;
 struct Call {
     work: Option<Work>,
-    result: Option<Result<(), String>>,
+    result: Option<Result<(), Message>>,
 }
 
 fn on_window_thread(
     window: HWND,
-    work: impl FnOnce() -> Result<(), String> + Send + 'static,
-) -> Result<(), String> {
+    work: impl FnOnce() -> Result<(), Message> + Send + 'static,
+) -> Result<(), Message> {
     let mut call = Call {
         work: Some(Box::new(work)),
         result: None,
@@ -206,8 +217,12 @@ fn on_window_thread(
     unsafe {
         SendMessageW(window, WM_RPC, 0, &mut call as *mut Call as LPARAM);
     }
-    call.result
-        .unwrap_or_else(|| Err("native window dispatcher unavailable".into()))
+    call.result.unwrap_or_else(|| {
+        Err(msg!(
+            "main.native_window_dispatcher_unavailable",
+            "native window dispatcher unavailable"
+        ))
+    })
 }
 
 unsafe fn dispatch_call(l: LPARAM) -> LRESULT {
@@ -466,13 +481,13 @@ struct WindowsBackend {
 }
 
 impl Backend for WindowsBackend {
-    fn key(&mut self, key: Key) -> Result<Event, String> {
+    fn key(&mut self, key: Key) -> Result<Event, Message> {
         self.api.key(key.code())
     }
-    fn character(&mut self, character: char) -> Result<Character, String> {
+    fn character(&mut self, character: char) -> Result<Character, Message> {
         self.api.character(character)
     }
-    fn submit(&mut self, event: Event, direction: u32) -> Result<(), String> {
+    fn submit(&mut self, event: Event, direction: u32) -> Result<(), Message> {
         let shared = &self.shared;
         let (version, logical) = {
             let mut state = shared.state.lock().unwrap();
@@ -502,7 +517,7 @@ impl Backend for WindowsBackend {
     }
 }
 
-fn begin_output(output: &mut Output<WindowsBackend>) -> Result<(), String> {
+fn begin_output(output: &mut Output<WindowsBackend>) -> Result<(), Message> {
     output.begin()?;
     let backend = &mut output.backend;
     let mut identities = BTreeMap::new();
@@ -524,7 +539,7 @@ fn begin_output(output: &mut Output<WindowsBackend>) -> Result<(), String> {
     Ok(())
 }
 
-fn reconcile(output: &mut Output<WindowsBackend>) -> Result<(), String> {
+fn reconcile(output: &mut Output<WindowsBackend>) -> Result<(), Message> {
     let mut failed = BTreeSet::new();
     let blocked = output.held_events().to_vec();
     let mut errors = Vec::new();
@@ -546,7 +561,7 @@ fn reconcile(output: &mut Output<WindowsBackend>) -> Result<(), String> {
             break;
         };
         let result = event
-            .ok_or_else(|| "modifier identity unavailable".to_string())
+            .ok_or_else(|| msg!("output.modifier_identity", "modifier identity unavailable"))
             .and_then(|event| output.backend.submit(event, if down { DOWN } else { UP }));
         if let Err(error) = result {
             failed.insert(key);
@@ -563,25 +578,31 @@ fn reconcile(output: &mut Output<WindowsBackend>) -> Result<(), String> {
     }
 }
 
-fn set_caps(output: &mut Output<WindowsBackend>, wanted: bool) -> Result<(), String> {
+fn set_caps(output: &mut Output<WindowsBackend>, wanted: bool) -> Result<(), Message> {
     let current = output.backend.shared.state.lock().unwrap().caps_on;
     if current == wanted {
         return Ok(());
     }
     let event = output.backend.key(Key::CAPS_LOCK)?;
     if output.held_events().contains(&event) {
-        return Err("Caps Lock release remains outstanding".into());
+        return Err(msg!(
+            "main.caps_lock_release_remains_outstanding",
+            "Caps Lock release remains outstanding"
+        ));
     }
     output.down(event)?;
     output.up(event)?;
     if output.backend.shared.state.lock().unwrap().caps_on == wanted {
         Ok(())
     } else {
-        Err("Caps Lock changed during character setup".into())
+        Err(msg!(
+            "main.caps_lock_changed_during_character_setup",
+            "Caps Lock changed during character setup"
+        ))
     }
 }
 
-fn restore_caps(output: &mut Output<WindowsBackend>) -> Result<(), String> {
+fn restore_caps(output: &mut Output<WindowsBackend>) -> Result<(), Message> {
     loop {
         let target = output.backend.shared.state.lock().unwrap().caps_restore;
         let Some(target) = target else {
@@ -596,7 +617,7 @@ fn restore_caps(output: &mut Output<WindowsBackend>) -> Result<(), String> {
     }
 }
 
-fn finish_output(output: &mut Output<WindowsBackend>, retry: bool) -> Result<(), String> {
+fn finish_output(output: &mut Output<WindowsBackend>, retry: bool) -> Result<(), Message> {
     let mut errors = Vec::new();
     for result in [
         output.cleanup(retry),
@@ -617,9 +638,9 @@ fn cancelled(shared: &Shared, generation: u64) -> bool {
     shared.generation.load(Ordering::SeqCst) != generation
 }
 
-fn tap(output: &mut Output<WindowsBackend>, event: Event, generation: u64) -> Result<(), String> {
+fn tap(output: &mut Output<WindowsBackend>, event: Event, generation: u64) -> Result<(), Message> {
     if cancelled(&output.backend.shared, generation) {
-        return Err("cancelled".into());
+        return Err(msg!("main.cancelled", "cancelled"));
     }
     output.down(event)?;
     output.up(event)
@@ -629,9 +650,9 @@ fn execute(
     output: &mut Output<WindowsBackend>,
     action: &Action,
     generation: u64,
-) -> Result<(), String> {
+) -> Result<(), Message> {
     if cancelled(&output.backend.shared, generation) {
-        return Err("cancelled".into());
+        return Err(msg!("main.cancelled", "cancelled"));
     }
     begin_output(output)?;
     match action {
@@ -645,7 +666,7 @@ fn execute(
             };
             for event in modifiers {
                 if cancelled(&output.backend.shared, generation) {
-                    return Err("cancelled".into());
+                    return Err(msg!("main.cancelled", "cancelled"));
                 }
                 output.down(*event)?;
             }
@@ -671,13 +692,13 @@ fn execute(
             }
             for character in text.chars() {
                 if cancelled(&output.backend.shared, generation) {
-                    return Err("cancelled".into());
+                    return Err(msg!("main.cancelled", "cancelled"));
                 }
                 let plan = output.backend.character(character)?;
                 set_caps(output, false)?;
                 for event in &plan.modifiers[..plan.modifier_count as usize] {
                     if cancelled(&output.backend.shared, generation) {
-                        return Err("cancelled".into());
+                        return Err(msg!("main.cancelled", "cancelled"));
                     }
                     output.down(*event)?;
                 }
@@ -742,11 +763,19 @@ fn worker(shared: Arc<Shared>, mut output: Output<WindowsBackend>) {
                         format_args!("activation cleanup failed: {error}"),
                     );
                 }
-                state.profiles.cancel(format!("Cleanup failed: {error}"));
+                state.profiles.cancel(msg!(
+                    "main.cleanup_failed",
+                    "Cleanup failed: {error}",
+                    error = error
+                ));
                 state.host.finish_transition(true);
                 drop(state);
                 shared.status(
-                    &format!("Cleanup failed: {error}"),
+                    &msg!(
+                        "main.cleanup_failed",
+                        "Cleanup failed: {error}",
+                        error = error
+                    ),
                     lifecycle == Lifecycle::Quit,
                     true,
                 );
@@ -786,7 +815,7 @@ fn worker(shared: Arc<Shared>, mut output: Output<WindowsBackend>) {
                         return Ok(());
                     }
                     if state.paused || !ui::desktop_ready() {
-                        return Err("Input desktop is unavailable; capture remains stopped. Use Enable to retry when it is available.".into());
+                        return Err(msg!("main.input_desktop_is_unavailable_capture_remains", "Input desktop is unavailable; capture remains stopped. Use Enable to retry when it is available."));
                     }
                     desktop::replace_hook(&mut state.hook, true)?;
                     let baseline = sample_baseline(|code| {
@@ -809,7 +838,7 @@ fn worker(shared: Arc<Shared>, mut output: Output<WindowsBackend>) {
                     state
                         .core
                         .restart(baseline)
-                        .map_err(|error| error.to_string())?;
+                        .map_err(|error| error.diagnostic())?;
                     // A later lifecycle request must keep admission closed.
                     state.admission = state.desired.is_none()
                         && !state.paused
@@ -843,7 +872,11 @@ fn worker(shared: Arc<Shared>, mut output: Output<WindowsBackend>) {
                             format_args!("activation native readiness failed: {error}"),
                         );
                     }
-                    state.profiles.cancel(format!("Native readiness: {error}"));
+                    state.profiles.cancel(msg!(
+                        "main.native_readiness",
+                        "Native readiness: {error}",
+                        error = error
+                    ));
                 }
                 state.host.finish_transition(result.is_err());
             }
@@ -909,7 +942,7 @@ fn worker(shared: Arc<Shared>, mut output: Output<WindowsBackend>) {
             Ok(execution) => execution,
             Err(error) => {
                 drop(state);
-                shared.status(&error.to_string(), false, true);
+                shared.status(&error.diagnostic(), false, true);
                 continue;
             }
         };
@@ -964,7 +997,7 @@ fn worker(shared: Arc<Shared>, mut output: Output<WindowsBackend>) {
     }
 }
 
-fn configure_hotkey(window: HWND, shared: &Shared, registered: bool) -> Result<(), String> {
+fn configure_hotkey(window: HWND, shared: &Shared, registered: bool) -> Result<(), Message> {
     let (chord, current) = {
         let state = shared.state.lock().unwrap();
         (state.core.config().global_hotkey, state.hotkey_registered)
@@ -988,34 +1021,35 @@ fn configure_hotkey(window: HWND, shared: &Shared, registered: bool) -> Result<(
         }
     };
     if success == 0 {
-        return Err(format!(
-            "global hotkey update failed: {}",
-            std::io::Error::last_os_error()
+        return Err(msg!(
+            "main.global_hotkey_update_failed",
+            "global hotkey update failed: {arg0}",
+            arg0 = std::io::Error::last_os_error()
         ));
     }
     shared.state.lock().unwrap().hotkey_registered = registered;
     Ok(())
 }
-fn tray_menu(next: Lifecycle) -> Result<HMENU, String> {
+fn tray_menu(next: Lifecycle) -> Result<HMENU, Message> {
     unsafe {
         let menu = CreatePopupMenu();
         if menu == 0 {
-            return Err(std::io::Error::last_os_error().to_string());
+            return Err(Message::from(std::io::Error::last_os_error().to_string()));
         }
         for (id, label) in [
-            (SHOW, "Show Window"),
+            (SHOW, msg!("ui.show_window", "Show Window")),
             (
                 TOGGLE,
                 if next == Lifecycle::Enable {
-                    "Enable"
+                    msg!("ui.enable", "Enable")
                 } else {
-                    "Disable"
+                    msg!("ui.disable", "Disable")
                 },
             ),
-            (QUIT, "Exit"),
+            (QUIT, msg!("ui.exit", "Exit")),
         ] {
-            if AppendMenuW(menu, MF_STRING, id, wide(label).as_ptr()) == 0 {
-                let error = std::io::Error::last_os_error().to_string();
+            if AppendMenuW(menu, MF_STRING, id, wide(&label).as_ptr()) == 0 {
+                let error = Message::from(std::io::Error::last_os_error().to_string());
                 DestroyMenu(menu);
                 return Err(error);
             }
@@ -1037,12 +1071,9 @@ unsafe extern "system" fn main_window(window: HWND, message: u32, w: WPARAM, l: 
             unsafe {
                 MessageBoxW(
                     window,
-                    wide(&format!(
-                        "Typing {}\r\nFast vim and emacs cursor moving and powerful key mapping\r\n\r\nGitHub: https://github.com/aldetl/Typing\r\nWebsite: https://xdetail.org/typing",
-                        env!("CARGO_PKG_VERSION")
-                    ))
+                    wide(&msg!("main.typing_fast_vim_and_emacs_cursor", "Typing {arg0}\r\nFast vim and emacs cursor moving and convenient key mapping\r\n\r\nGitHub: https://github.com/aldetl/Typing\r\nWebsite: https://xdetail.org/typing", arg0 = env!("CARGO_PKG_VERSION")))
                     .as_ptr(),
-                    wide("About Typing").as_ptr(),
+                    wide(&msg!("ui.about_typing", "About Typing")).as_ptr(),
                     MB_OK | MB_ICONINFORMATION,
                 );
             }
@@ -1071,7 +1102,7 @@ unsafe extern "system" fn main_window(window: HWND, message: u32, w: WPARAM, l: 
         }
         WM_STATUS => {
             let (mut text, quit, failed) =
-                *unsafe { Box::from_raw(l as *mut (String, bool, bool)) };
+                *unsafe { Box::from_raw(l as *mut (Message, bool, bool)) };
             ui::profile_status();
             if !quit {
                 let fallback = {
@@ -1085,20 +1116,24 @@ unsafe extern "system" fn main_window(window: HWND, message: u32, w: WPARAM, l: 
                     state.host.close_admission();
                     state.host.failed = true;
                     drop(state);
-                    text = format!("{text}\r\n{error}");
+                    text = msg!(
+                        "main.detail",
+                        "{text}\r\n{error}",
+                        text = text,
+                        error = error
+                    );
                 }
             }
             ui::refresh();
-            unsafe {
-                SetWindowTextW(window, wide(&format!("Typing - {text}")).as_ptr());
-            }
+            language::set_caption(window, &msg!("main.typing", "Typing - {text}", text = text));
             if quit {
                 if failed {
                     unsafe {
                         MessageBoxW(
                             window,
                             wide(&text).as_ptr(),
-                            wide("Typing cleanup warning").as_ptr(),
+                            wide(&msg!("ui.typing_cleanup_warning", "Typing cleanup warning"))
+                                .as_ptr(),
                             MB_OK | MB_ICONWARNING,
                         );
                     }
@@ -1158,20 +1193,20 @@ unsafe extern "system" fn main_window(window: HWND, message: u32, w: WPARAM, l: 
     }
 }
 
-fn create_window(class: &str, title: &str, procedure: WNDPROC) -> Result<HWND, String> {
+fn create_window(class: &str, title: &str, procedure: WNDPROC) -> Result<HWND, Message> {
     let name = wide(class);
     let mut class: WNDCLASSW = unsafe { std::mem::zeroed() };
     class.lpfnWndProc = procedure;
     class.hInstance = unsafe { GetModuleHandleW(std::ptr::null()) };
     class.hIcon = unsafe { LoadIconW(class.hInstance, 100 as *const u16) };
     if class.hIcon == 0 {
-        return Err(std::io::Error::last_os_error().to_string());
+        return Err(Message::from(std::io::Error::last_os_error().to_string()));
     }
     class.hCursor = unsafe { LoadCursorW(0, IDC_ARROW) };
     class.hbrBackground = (windows_sys::Win32::Graphics::Gdi::COLOR_WINDOW + 1) as isize;
     class.lpszClassName = name.as_ptr();
     if unsafe { RegisterClassW(&class) } == 0 {
-        return Err(std::io::Error::last_os_error().to_string());
+        return Err(Message::from(std::io::Error::last_os_error().to_string()));
     }
     let window = unsafe {
         CreateWindowExW(
@@ -1194,7 +1229,7 @@ fn create_window(class: &str, title: &str, procedure: WNDPROC) -> Result<HWND, S
         )
     };
     if window == 0 {
-        Err(std::io::Error::last_os_error().to_string())
+        Err(Message::from(std::io::Error::last_os_error().to_string()))
     } else {
         Ok(window)
     }
@@ -1233,65 +1268,95 @@ fn load_configuration(
         typing_host::Feedback,
         typing_host::profiles::Activation,
     ),
-    String,
+    Message,
 > {
-    let path = std::path::absolute(path)
-        .map_err(|error| format!("Invalid configuration path: {error}"))?;
-    let help = "Edit or restore configuration.ini, then restart Typing. No keyboard handling was started and the file was not changed.";
+    let path = std::path::absolute(path).map_err(|error| {
+        msg!(
+            "main.invalid_configuration_path",
+            "Invalid configuration path: {error}",
+            error = error
+        )
+    })?;
+    let help = msg!(
+        "main.edit_or_restore_configuration_ini_then",
+        "Edit or restore configuration.ini, then restart Typing. No keyboard handling was started and the file was not changed."
+    );
     let text = std::fs::read_to_string(&path).map_err(|error| {
-        format!(
-            "Cannot read configuration:\r\n{}\r\n{error}\r\n\r\n{help}",
-            path.display()
+        msg!(
+            "main.cannot_read_configuration",
+            "Cannot read configuration:\r\n{arg0}\r\n{error}\r\n\r\n{help}",
+            arg0 = path.display(),
+            error = error,
+            help = help
         )
     })?;
     let application = typing_host::profiles::Application::parse(path.clone(), text.clone())
         .map_err(|error| {
-            format!(
-                "Invalid configuration {}:\r\n{error}\r\n{help}",
-                path.display()
+            msg!(
+                "main.invalid_configuration",
+                "Invalid configuration {arg0}:\r\n{error}\r\n{help}",
+                arg0 = path.display(),
+                error = error,
+                help = help
             )
         })?;
     let (profiles, config) =
         typing_host::profiles::Activation::load(application).map_err(|error| {
-            format!(
-                "Invalid configuration {}:\r\n{error}\r\n{help}",
-                path.display()
+            msg!(
+                "main.invalid_configuration",
+                "Invalid configuration {arg0}:\r\n{error}\r\n{help}",
+                arg0 = path.display(),
+                error = error,
+                help = help
             )
         })?;
     let feedback = typing_host::Feedback::from_config(&config).map_err(|error| {
-        format!(
-            "Invalid configuration:\r\n{}\r\n{error}\r\n\r\n{help}",
-            path.display()
+        msg!(
+            "main.invalid_configuration_2",
+            "Invalid configuration:\r\n{arg0}\r\n{error}\r\n\r\n{help}",
+            arg0 = path.display(),
+            error = error,
+            help = help
         )
     })?;
     Ok((text, config, feedback, profiles))
 }
 
-fn run() -> Result<(), String> {
+fn run() -> Result<(), Message> {
     ui::prepare_process();
     let directory = std::env::current_exe()
-        .map_err(|error| error.to_string())?
+        .map_err(|error| Message::from(error.to_string()))?
         .parent()
         .unwrap()
         .to_path_buf();
+    language::initialize(directory.clone());
     let mut config_path = directory.join("configuration.ini");
     let mut dll_path = directory.join("inputsim.dll");
     let mut preference_path = ui::preference_path();
     let mut log_path = preference_path.with_file_name("typing.log");
     let mut arguments = std::env::args_os().skip(1);
     while let Some(option) = arguments.next() {
-        let value = arguments
-            .next()
-            .ok_or("expected a path after each option")?;
+        let value = arguments.next().ok_or_else(|| {
+            msg!(
+                "main.expected_a_path_after_each_option",
+                "expected a path after each option"
+            )
+        })?;
         match option.to_str() {
             Some("--config") => config_path = PathBuf::from(value),
             Some("--inputsim") => dll_path = PathBuf::from(value),
             Some("--log") => log_path = PathBuf::from(value),
             Some("--state") => preference_path = PathBuf::from(value),
-            _ => return Err("options are --config, --inputsim, --log, and --state".into()),
+            _ => {
+                return Err(msg!(
+                    "main.options_are_config_inputsim_log_and",
+                    "options are --config, --inputsim, --log, and --state"
+                ));
+            }
         }
     }
     logging::start(log_path, env!("CARGO_PKG_VERSION"));
+    language::log_diagnostics();
     let (text, config, feedback, profiles) = load_configuration(&config_path)?;
     let profile_recovery = !profiles.valid;
     let api = Arc::new(InputSim::load(&dll_path)?);
@@ -1327,17 +1392,19 @@ fn run() -> Result<(), String> {
     });
     SHARED
         .set(shared.clone())
-        .map_err(|_| "host already initialized")?;
+        .map_err(|_| msg!("main.initialized", "Host already initialized"))?;
     logging::info(
         "startup",
         format_args!("configuration loaded; InputSim loaded"),
     );
     let main = create_window(
         "TypingWindowsClient",
-        "Typing - Starting",
+        &language::render(&msg!("main.starting", "Typing - Starting")),
         Some(main_window),
     )?;
     shared.main_window.store(main as u64, Ordering::SeqCst);
+    language::root(main);
+    language::set_caption(main, &msg!("main.starting", "Typing - Starting"));
     if let Err(error) = ui::initialize(main, &text, feedback, preference_path, event_receiver) {
         unsafe {
             DestroyWindow(main);
@@ -1361,7 +1428,9 @@ fn run() -> Result<(), String> {
             message_loop();
         }
     });
-    let hook = receiver.recv().map_err(|error| error.to_string())??;
+    let hook = receiver
+        .recv()
+        .map_err(|error| Message::from(error.to_string()))??;
     shared.hook_window.store(hook as u64, Ordering::SeqCst);
     let worker_shared = shared.clone();
     let backend = WindowsBackend {
@@ -1413,7 +1482,7 @@ fn main() {
             MessageBoxW(
                 0,
                 wide(&error).as_ptr(),
-                wide("Typing startup error").as_ptr(),
+                wide(&msg!("ui.typing_startup_error", "Typing startup error")).as_ptr(),
                 MB_OK | MB_ICONERROR,
             );
         }
@@ -1429,15 +1498,19 @@ mod host_tests {
     #[test]
     fn tray_menu_orders_show_toggle_exit_and_labels_the_next_action() {
         for (next, label) in [
-            (Lifecycle::Enable, "Enable"),
-            (Lifecycle::Disable, "Disable"),
+            (Lifecycle::Enable, msg!("ui.enable", "Enable")),
+            (Lifecycle::Disable, msg!("ui.disable", "Disable")),
         ] {
             let menu = tray_menu(next).unwrap();
             unsafe {
                 assert_eq!(GetMenuItemCount(menu), 3);
-                for (index, (id, title)) in [(SHOW, "Show Window"), (TOGGLE, label), (QUIT, "Exit")]
-                    .into_iter()
-                    .enumerate()
+                for (index, (id, title)) in [
+                    (SHOW, msg!("ui.show_window", "Show Window")),
+                    (TOGGLE, label),
+                    (QUIT, msg!("ui.exit", "Exit")),
+                ]
+                .into_iter()
+                .enumerate()
                 {
                     let mut buffer = [0u16; 64];
                     assert_eq!(GetMenuItemID(menu, index as i32), id as u32);
@@ -1448,7 +1521,10 @@ mod host_tests {
                         buffer.len() as i32,
                         MF_BYPOSITION,
                     );
-                    assert_eq!(String::from_utf16_lossy(&buffer[..count as usize]), title);
+                    assert_eq!(
+                        String::from_utf16_lossy(&buffer[..count as usize]),
+                        language::render(&title)
+                    );
                 }
                 DestroyMenu(menu);
             }

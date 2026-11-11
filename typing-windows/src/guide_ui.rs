@@ -6,7 +6,7 @@ struct GuideDialog {
     close: HWND,
     font: HFONT,
     dpi: u32,
-    render_key: Option<(i32, u32, u32)>,
+    render_key: Option<(i32, u32, u32, u64)>,
     done: bool,
 }
 
@@ -70,7 +70,7 @@ fn layout(window: HWND, update_font: bool) {
             1,
         );
     }
-    let key = (width, dialog.dpi, text_scale);
+    let key = (width, dialog.dpi, text_scale, language::snapshot().revision);
     if dialog.render_key != Some(key) {
         render_help(dialog.view, dialog.font);
         dialog.render_key = Some(key);
@@ -129,7 +129,7 @@ unsafe extern "system" fn dialog_proc(window: HWND, message: u32, w: WPARAM, l: 
     unsafe { DefWindowProcW(window, message, w, l) }
 }
 
-pub(super) fn show(owner: HWND) -> Result<(), String> {
+pub(super) fn show(owner: HWND) -> Result<(), Message> {
     static CLASS: OnceLock<bool> = OnceLock::new();
     if !CLASS.get_or_init(|| {
         let name = wide("TypingGuideDialog");
@@ -143,7 +143,10 @@ pub(super) fn show(owner: HWND) -> Result<(), String> {
         };
         unsafe { RegisterClassW(&class) != 0 }
     }) {
-        return Err(last_error("register user guide dialog"));
+        return Err(last_error(&msg!(
+            "windows.operation.register_user_guide_dialog",
+            "register user guide dialog"
+        )));
     }
     let dpi = compatibility::window_dpi(owner);
     let mut bounds: RECT = unsafe { std::mem::zeroed() };
@@ -175,7 +178,7 @@ pub(super) fn show(owner: HWND) -> Result<(), String> {
         CreateWindowExW(
             WS_EX_CONTROLPARENT,
             wide("TypingGuideDialog").as_ptr(),
-            wide("Typing User Guide").as_ptr(),
+            wide(&msg!("ui.typing_user_guide", "Typing User Guide")).as_ptr(),
             WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
             x,
             y,
@@ -188,15 +191,18 @@ pub(super) fn show(owner: HWND) -> Result<(), String> {
         )
     };
     if window == 0 {
-        return Err(last_error("create user guide dialog"));
+        return Err(last_error(&msg!(
+            "windows.operation.create_user_guide_dialog",
+            "create user guide dialog"
+        )));
     }
     let controls = (|| {
-        Ok::<_, String>((
+        Ok::<_, Message>((
             help_view(window)?,
             child(
                 window,
                 "BUTTON",
-                "&Close",
+                msg!("ui.close", "Close"),
                 WS_TABSTOP | BS_DEFPUSHBUTTON as u32,
                 2,
             )?,
@@ -249,7 +255,10 @@ pub(super) fn show(owner: HWND) -> Result<(), String> {
                     PostQuitMessage(message.wParam as i32);
                 }
             } else {
-                result = Err(last_error("read user guide messages"));
+                result = Err(last_error(&msg!(
+                    "windows.operation.read_user_guide_messages",
+                    "read user guide messages"
+                )));
             }
             break;
         }

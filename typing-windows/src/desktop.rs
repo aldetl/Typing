@@ -1,7 +1,7 @@
 //! Checked native capture replacement. A rejected removal retains its handle.
 use super::*;
 
-pub fn replace_hook(handle: &mut HHOOK, enable: bool) -> Result<(), String> {
+pub fn replace_hook(handle: &mut HHOOK, enable: bool) -> Result<(), Message> {
     replace_hook_with(
         handle,
         enable,
@@ -35,23 +35,25 @@ fn replace_hook_with(
     enable: bool,
     mut remove: impl FnMut(HHOOK) -> Result<(), u32>,
     mut install: impl FnMut() -> Result<HHOOK, u32>,
-) -> Result<(), String> {
+) -> Result<(), Message> {
     if *handle != 0 {
         match remove(*handle) {
             Ok(()) | Err(ERROR_INVALID_HOOK_HANDLE) => *handle = 0,
             Err(code) => {
-                return Err(format!(
-                    "remove hook: {}",
-                    std::io::Error::from_raw_os_error(code as i32)
+                return Err(msg!(
+                    "desktop.remove_hook",
+                    "remove hook: {arg0}",
+                    arg0 = std::io::Error::from_raw_os_error(code as i32)
                 ));
             }
         }
     }
     if enable {
         *handle = install().map_err(|code| {
-            format!(
-                "install hook: {}",
-                std::io::Error::from_raw_os_error(code as i32)
+            msg!(
+                "desktop.install_hook",
+                "install hook: {arg0}",
+                arg0 = std::io::Error::from_raw_os_error(code as i32)
             )
         })?;
     }

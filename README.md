@@ -8,11 +8,11 @@ Typing is an efficient tool that keeps your hands on the keyboard and reduces th
 - Independent mapping profiles with a visual editor, shortcut recording, and per-mapping enable/disable controls.
 - Explicit profile activation: save a profile for later or apply it with **Set as active**.
 - Tray controls, cursor feedback for command mode and Caps Lock, and optional startup when you sign in to Windows.
-- A portable application with native Windows controls and an included user guide.
+- A portable Windows app with an interface and user guide in English and Simplified Chinese.
 
 ## Get started
 
-Extract the complete portable package into a folder. Keep `Typing.exe`, `inputsim.dll`, `configuration.ini`, and `profiles/` together, and quit any other Typing or Aldetl instance using the same global shortcut.
+Extract the complete portable package into a folder. Keep `Typing.exe`, `inputsim.dll`, `configuration.ini`, and the `profiles/` and `languages/` folders together, and quit any other Typing or Aldetl instance using the same global shortcut.
 
 1. Run `Typing.exe`. It starts enabled in the Windows notification area (the tray).
 2. Open a text editor. With the default profile, tap and release **Caps Lock** or **Left Alt** alone to enter command mode.
@@ -22,6 +22,8 @@ Extract the complete portable package into a folder. Keep `Typing.exe`, `inputsi
 Use **Ctrl+U** to enable or disable Typing. Choose **Show Window** from the tray to open the mapping editor, event diagnostics, settings, and help. Closing the window hides it; choose tray **Exit** to quit.
 
 In **Mapping Profile**, **Save** writes a profile and **Set as active** applies it. **Import** brings in supported profiles or legacy configuration mappings without changing the source file. Review imported mappings before activating them. See the [user guide](docs/USER_GUIDE.md) for the full command list, profile management, preferences, and troubleshooting.
+
+In **Settings**, choose **System default**, **English**, or **简体中文**. The interface and user guide switch immediately.
 
 ## Development
 

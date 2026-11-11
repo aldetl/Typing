@@ -16,7 +16,7 @@ try {
     $libraries = @("/LIBPATH:$($toolset.FullName)/lib/$Architecture", "/LIBPATH:$sdkRoot/Lib/$($sdk.Name)/ucrt/$Architecture", "/LIBPATH:$sdkRoot/Lib/$($sdk.Name)/um/$Architecture")
     $output = Join-Path $projectRoot "target/tests-$Architecture"
     New-Item -ItemType Directory -Force -Path $output | Out-Null
-    foreach ($name in @('windows_receiver','native_ui','startup_errors','profiles_ui')) {
+    foreach ($name in @('windows_receiver','native_ui','startup_errors','profiles_ui','language_ui')) {
         & $compiler /nologo /W4 /WX /TC /std:c11 /MT /X @includes "typing-windows/tests/$name.c" "/Fo$output/$name.obj" "/Fe$output/$name.exe" /link @libraries user32.lib gdi32.lib
         if ($LASTEXITCODE -ne 0) { throw "Native test build failed: $name ($Architecture)" }
     }

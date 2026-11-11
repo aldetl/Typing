@@ -1,4 +1,5 @@
 use std::{ffi::CString, path::Path};
+use typing_core::{Message, msg};
 use windows_sys::Win32::{
     Foundation::FreeLibrary,
     System::LibraryLoader::{
@@ -37,8 +38,8 @@ pub struct InputSim {
 }
 
 impl InputSim {
-    pub fn load(path: &Path) -> Result<Self, String> {
-        let absolute = path.canonicalize().map_err(|error| format!("Cannot locate InputSim DLL {}: {error}. Keep the matching inputsim.dll beside Typing.exe or specify --inputsim PATH.",path.display()))?;
+    pub fn load(path: &Path) -> Result<Self, Message> {
+        let absolute = path.canonicalize().map_err(|error| msg!("inputsim.cannot_locate_inputsim_dll_keep_the", "Cannot locate InputSim DLL {arg0}: {error}. Keep the matching inputsim.dll beside Typing.exe or specify --inputsim PATH.", arg0 = path.display(), error = error))?;
         let name: Vec<u16> = absolute
             .to_string_lossy()
             .encode_utf16()
@@ -63,16 +64,17 @@ impl InputSim {
             )
         };
         if module == 0 {
-            return Err(format!(
-                "Cannot load InputSim DLL {}: {}. Use a DLL matching the executable architecture.",
-                absolute.display(),
-                std::io::Error::last_os_error()
+            return Err(msg!(
+                "inputsim.cannot_load_inputsim_dll_use_a",
+                "Cannot load InputSim DLL {arg0}: {arg1}. Use a DLL matching the executable architecture.",
+                arg0 = absolute.display(),
+                arg1 = std::io::Error::last_os_error()
             ));
         }
         let symbol = |name: &str| {
             let c_name = CString::new(name).unwrap();
             unsafe { GetProcAddress(module, c_name.as_ptr().cast()) }
-                .ok_or_else(|| format!("InputSim DLL {} is missing required v1 export {name}. Use the matching packaged DLL.",absolute.display()))
+                .ok_or_else(|| msg!("inputsim.inputsim_dll_is_missing_required_v", "InputSim DLL {arg0} is missing required v1 export {name}. Use the matching packaged DLL.", arg0 = absolute.display(), name = name))
         };
         let loaded = (|| {
             Ok(Self {
@@ -105,32 +107,46 @@ impl InputSim {
         loaded
     }
 
-    pub fn key(&self, key: u16) -> Result<Event, String> {
+    pub fn key(&self, key: u16) -> Result<Event, Message> {
         let mut value = Event::default();
         let result = unsafe { (self.key)(key as u32, &mut value) };
         if result == RESOLVED {
             Ok(value)
         } else {
-            Err(format!("resolve key {key}: {result}"))
+            Err(msg!(
+                "inputsim.resolve_key",
+                "resolve key {key}: {result}",
+                key = key,
+                result = result
+            ))
         }
     }
 
-    pub fn character(&self, character: char) -> Result<Character, String> {
+    pub fn character(&self, character: char) -> Result<Character, Message> {
         let mut value = Character::default();
         let result = unsafe { (self.character)(character as u32, &mut value) };
         if result == RESOLVED && value.modifier_count <= 3 {
             Ok(value)
         } else {
-            Err(format!("resolve character: {result}"))
+            Err(msg!(
+                "inputsim.resolve_character",
+                "resolve character: {result}",
+                result = result
+            ))
         }
     }
 
-    pub fn submit(&self, event: Event, direction: u32, tag: usize) -> Result<(), String> {
+    pub fn submit(&self, event: Event, direction: u32, tag: usize) -> Result<(), Message> {
         let result = unsafe { (self.submit)(&event, direction, tag) };
         if result == INSERTED {
             Ok(())
         } else {
-            Err(format!("submit {direction}: {result}"))
+            Err(msg!(
+                "inputsim.submit",
+                "submit {direction}: {result}",
+                direction = direction,
+                result = result
+            ))
         }
     }
 }

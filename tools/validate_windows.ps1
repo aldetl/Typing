@@ -3,6 +3,8 @@ param([switch]$BuildOnly, [switch]$Portable, [switch]$LiveOnly,
 $ErrorActionPreference = 'Stop'
 $projectRoot = Split-Path -Parent $PSScriptRoot
 Push-Location -LiteralPath $projectRoot
+$languageValidationEnvironmentChanged = $false
+$originalLanguageValidationAppData = $null
 try {
     if ($BuildOnly -and $LiveOnly) { throw 'BuildOnly and LiveOnly cannot be combined.' }
     if (-not $LiveOnly) {
@@ -35,6 +37,14 @@ try {
         "[hotkeys]" + [Environment]::NewLine + "F10=Control+Shift+F12" + [Environment]::NewLine
     Set-Content -LiteralPath target/integration.ini -Value $fixture -Encoding utf8
     if (-not $BuildOnly) {
+        # The existing native assertions use English labels. Isolate their
+        # language preference from the user's selection for the whole suite.
+        $languageValidationAppData = Join-Path $projectRoot ("target/language-validation-user-" + [guid]::NewGuid().ToString('N'))
+        New-Item -ItemType Directory -Path (Join-Path $languageValidationAppData 'Typing') -Force | Out-Null
+        [IO.File]::WriteAllText((Join-Path $languageValidationAppData 'Typing/language.txt'), "en`n")
+        $originalLanguageValidationAppData = [Environment]::GetEnvironmentVariable('LOCALAPPDATA', 'Process')
+        [Environment]::SetEnvironmentVariable('LOCALAPPDATA', $languageValidationAppData, 'Process')
+        $languageValidationEnvironmentChanged = $true
         $application = (Resolve-Path -LiteralPath target/release/Typing.exe).Path
         $dll = (Resolve-Path -LiteralPath target/inputsim/release/inputsim.dll).Path
         if ($Architecture -eq 'x86' -and -not $Portable) {
@@ -83,6 +93,10 @@ try {
         & (Join-Path $testTools 'profiles_ui.exe') $application $dll $profileTestRoot.Replace('\','/') |
             Tee-Object -FilePath "target/profiles-ui-$Architecture-live.log"
         if ($LASTEXITCODE -ne 0) { throw 'Profile UI verification failed' }
+        $languageTestRoot = Join-Path $projectRoot ("target/language-native-$Architecture-" + [guid]::NewGuid().ToString('N'))
+        & (Join-Path $testTools 'language_ui.exe') $application $dll $languageTestRoot (Join-Path $projectRoot 'resources/languages') |
+            Tee-Object -FilePath "target/language-ui-$Architecture-live.log"
+        if ($LASTEXITCODE -ne 0) { throw 'Language UI verification failed' }
         if ($Portable) {
             $nativeTest = Join-Path $testTools 'native_ui.exe'
             Push-Location -LiteralPath ([IO.Path]::GetTempPath())
@@ -94,5 +108,8 @@ try {
         }
     }
 } finally {
+    if ($languageValidationEnvironmentChanged) {
+        [Environment]::SetEnvironmentVariable('LOCALAPPDATA', $originalLanguageValidationAppData, 'Process')
+    }
     Pop-Location
 }

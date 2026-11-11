@@ -240,9 +240,12 @@ int wmain(int argc,wchar_t **argv) {
         CHECK((GetWindowLongW(checkbox,GWL_STYLE)&WS_TABSTOP)!=0);}
     {HWND settings=page(L"Settings"),explanation=FindWindowExW(settings,NULL,L"EDIT",NULL);
         HWND error=FindWindowExW(settings,explanation,L"EDIT",NULL);wchar_t content[1024];RECT original,wide,narrow;
-        CHECK(explanation&&error&&FindWindowExW(settings,error,L"EDIT",NULL)==NULL);
+        HWND language_error=GetDlgItem(settings,2022);
+        CHECK(explanation&&error&&language_error&&GetDlgItem(settings,2020));
+        CHECK(FindWindowExW(settings,error,L"EDIT",NULL)==language_error&&FindWindowExW(settings,language_error,L"EDIT",NULL)==NULL);
         CHECK((GetWindowLongW(error,GWL_STYLE)&WS_VISIBLE)==0);
-        CHECK(FindWindowExW(settings,NULL,L"STATIC",NULL)==NULL);
+        CHECK(FindWindowExW(settings,NULL,L"STATIC",NULL)==GetDlgItem(settings,2021));
+        CHECK((GetWindowLongW(GetDlgItem(settings,2020),GWL_STYLE)&(CBS_DROPDOWNLIST|WS_TABSTOP))==(CBS_DROPDOWNLIST|WS_TABSTOP));
         CHECK(GetWindowTextW(explanation,content,ARRAYSIZE(content))>0);
         CHECK(wcsstr(content,L"system tray")&&wcsstr(content,L"new location"));
         CHECK((GetWindowLongW(explanation,GWL_STYLE)&(ES_READONLY|ES_MULTILINE))==(ES_READONLY|ES_MULTILINE));
@@ -351,6 +354,7 @@ int wmain(int argc,wchar_t **argv) {
     {HWND text=about_content(dialog);wchar_t content[2048];RECT bounds={0},required={0};
         CHECK(text&&GetWindowTextW(text,content,ARRAYSIZE(content))>0);
         CHECK(wcsstr(content,L"https://github.com/aldetl/Typing")&&wcsstr(content,L"https://xdetail.org/typing"));
+        CHECK(wcsstr(content,L"convenient key mapping"));
         CHECK(GetClientRect(text,&bounds));required.right=bounds.right;
         HDC dc=GetDC(text);HGDIOBJ font=SelectObject(dc,(HFONT)SendMessageW(text,WM_GETFONT,0,0));
         int height=DrawTextW(dc,content,-1,&required,DT_CALCRECT|DT_WORDBREAK|DT_NOPREFIX);

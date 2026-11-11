@@ -14,10 +14,10 @@ mod guide;
 mod profiles;
 pub use profiles::{confirm_exit, profile_status, show_profile_recovery};
 
-fn help_view(parent: HWND) -> Result<HWND, String> {
+fn help_view(parent: HWND) -> Result<HWND, Message> {
     // Rich Edit's window procedure must remain loaded until all child windows
     // are destroyed. The OS releases this process-lifetime module at exit.
-    static MODULE: OnceLock<Result<isize, String>> = OnceLock::new();
+    static MODULE: OnceLock<Result<isize, Message>> = OnceLock::new();
     MODULE
         .get_or_init(|| {
             let mut directory = vec![0u16; 32768];
@@ -28,7 +28,10 @@ fn help_view(parent: HWND) -> Result<HWND, String> {
                 )
             } as usize;
             if length == 0 || length >= directory.len() {
-                return Err(last_error("locate system Rich Edit"));
+                return Err(last_error(&msg!(
+                    "windows.operation.locate_system_rich_edit",
+                    "locate system Rich Edit"
+                )));
             }
             let path =
                 PathBuf::from(String::from_utf16_lossy(&directory[..length])).join("Msftedit.dll");
@@ -38,7 +41,10 @@ fn help_view(parent: HWND) -> Result<HWND, String> {
                 )
             };
             if module == 0 {
-                Err(last_error("load system Rich Edit"))
+                Err(last_error(&msg!(
+                    "windows.operation.load_system_rich_edit",
+                    "load system Rich Edit"
+                )))
             } else {
                 Ok(module)
             }
@@ -97,12 +103,9 @@ fn render_help(view: HWND, font: HFONT) {
     let width_twips =
         ((text_rect.right - text_rect.left - 2).max(1) as i64 * 1440 / native_dpi as i64) as i32;
     let font_size = (label_format.height + 5) / 10;
-    let mut rtf = typing_host::help::markdown_rtf(
-        include_str!("../../docs/USER_GUIDE.md"),
-        width_twips,
-        font_size,
-    )
-    .into_bytes();
+    let mut rtf =
+        typing_host::help::markdown_rtf(&language::snapshot().guide, width_twips, font_size)
+            .into_bytes();
     rtf.push(0);
     let format = SetText {
         flags: 0,
@@ -137,6 +140,18 @@ const BINDINGS_PAGE: usize = 0;
 const EVENTS_PAGE: usize = 1;
 const SETTINGS_PAGE: usize = 2;
 const HELP_PAGE: usize = 3;
+const LANGUAGE: usize = 2020;
+const LANGUAGE_LABEL: usize = 2021;
+const LANGUAGE_ERROR: usize = 2022;
+
+fn tab_titles() -> [Message; 4] {
+    [
+        msg!("ui.mapping_profile", "Mapping Profile"),
+        msg!("ui.event_diagnostics", "Event diagnostics"),
+        msg!("ui.settings", "Settings"),
+        msg!("ui.help", "Help"),
+    ]
+}
 const GUIDE: usize = 2011;
 const OPEN_GUIDE: usize = 2012;
 const INTRODUCTION: usize = 2013;
@@ -185,6 +200,7 @@ struct Desktop {
     icons: [HICON; 3],
     icon: usize,
     events: Receiver<DiagnosticEvent>,
+    displayed_events: std::collections::VecDeque<DiagnosticEvent>,
     key_list: HWND,
     keyboard_events: HWND,
     startup_checked: Option<bool>,
@@ -195,8 +211,13 @@ struct Desktop {
     desktop_notifications: HWINEVENTHOOK,
 }
 
-fn last_error(operation: &str) -> String {
-    format!("{operation}: {}", std::io::Error::last_os_error())
+fn last_error(operation: &(impl MessageValue + ?Sized)) -> Message {
+    msg!(
+        "startup.detail",
+        "{operation}: {arg0}",
+        operation = operation,
+        arg0 = std::io::Error::last_os_error()
+    )
 }
 
 pub fn desktop_ready() -> bool {
@@ -214,7 +235,13 @@ pub fn desktop_ready() -> bool {
         if checked == 0 {
             logging::error(
                 "desktop",
-                format_args!("{}", last_error("inspect input desktop")),
+                format_args!(
+                    "{}",
+                    last_error(&msg!(
+                        "windows.operation.inspect_input_desktop",
+                        "inspect input desktop"
+                    ))
+                ),
             );
         }
         checked != 0 && receiving_input != 0
@@ -248,7 +275,7 @@ fn ui_gap(dpi: u32) -> i32 {
     scale(BASE_SPACING, dpi)
 }
 
-fn text_block(parent: HWND, text: &str, id: usize) -> Result<HWND, String> {
+fn text_block(parent: HWND, text: impl MessageValue, id: usize) -> Result<HWND, Message> {
     child(
         parent,
         "EDIT",
@@ -310,12 +337,19 @@ fn text_scale() -> u32 {
     }
     value.clamp(100, 225)
 }
-fn child(parent: HWND, class: &str, text: &str, style: u32, id: usize) -> Result<HWND, String> {
+fn child(
+    parent: HWND,
+    class: &str,
+    text: impl MessageValue,
+    style: u32,
+    id: usize,
+) -> Result<HWND, Message> {
+    let text = Message::value(&text);
     let window = unsafe {
         CreateWindowExW(
             0,
             wide(class).as_ptr(),
-            wide(text).as_ptr(),
+            wide(&language::control_text(class, &text)).as_ptr(),
             WS_CHILD | WS_VISIBLE | WS_CLIPSIBLINGS | style,
             0,
             0,
@@ -328,12 +362,16 @@ fn child(parent: HWND, class: &str, text: &str, style: u32, id: usize) -> Result
         )
     };
     if window == 0 {
-        Err(last_error("create control"))
+        Err(last_error(&msg!(
+            "windows.operation.create_control",
+            "create control"
+        )))
     } else {
+        language::remember(window, &text);
         Ok(window)
     }
 }
-fn list(parent: HWND, labels: &[&str]) -> Result<HWND, String> {
+fn list(parent: HWND, labels: &[impl MessageValue]) -> Result<HWND, Message> {
     let window = child(
         parent,
         "SysListView32",
@@ -367,6 +405,7 @@ fn list(parent: HWND, labels: &[&str]) -> Result<HWND, String> {
             );
         }
     }
+    language::columns(window, labels.iter().map(Message::value).collect());
     Ok(window)
 }
 fn row(window: HWND, values: &[String], newest: bool) {
@@ -407,14 +446,17 @@ pub fn initialize(
     feedback: Feedback,
     preference: PathBuf,
     events: Receiver<DiagnosticEvent>,
-) -> Result<(), String> {
+) -> Result<(), Message> {
     unsafe {
         let controls = INITCOMMONCONTROLSEX {
             dwSize: std::mem::size_of::<INITCOMMONCONTROLSEX>() as u32,
             dwICC: ICC_TAB_CLASSES | ICC_LISTVIEW_CLASSES,
         };
         if InitCommonControlsEx(&controls) == 0 {
-            return Err(last_error("initialize common controls"));
+            return Err(last_error(&msg!(
+                "windows.operation.initialize_common_controls",
+                "initialize common controls"
+            )));
         }
     }
     let class_name = wide("TypingPage");
@@ -427,7 +469,10 @@ pub fn initialize(
         ..unsafe { std::mem::zeroed() }
     };
     if unsafe { RegisterClassW(&class) } == 0 {
-        return Err(last_error("register page class"));
+        return Err(last_error(&msg!(
+            "windows.operation.register_page_class",
+            "register page class"
+        )));
     }
     let overlay_name = wide("TypingCursorFeedback");
     let overlay_class = WNDCLASSW {
@@ -437,13 +482,16 @@ pub fn initialize(
         ..unsafe { std::mem::zeroed() }
     };
     if unsafe { RegisterClassW(&overlay_class) } == 0 {
-        return Err(last_error("register overlay class"));
+        return Err(last_error(&msg!(
+            "windows.operation.register_overlay_class",
+            "register overlay class"
+        )));
     }
     let overlay = unsafe {
         CreateWindowExW(
             WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
             overlay_name.as_ptr(),
-            wide("Typing cursor feedback").as_ptr(),
+            wide(&msg!("ui.cursor_feedback", "Typing cursor feedback")).as_ptr(),
             WS_POPUP,
             0,
             0,
@@ -456,7 +504,10 @@ pub fn initialize(
         )
     };
     if overlay == 0 {
-        return Err(last_error("create cursor feedback"));
+        return Err(last_error(&msg!(
+            "windows.operation.create_cursor_feedback",
+            "create cursor feedback"
+        )));
     }
     let tabs = child(
         window,
@@ -470,9 +521,9 @@ pub fn initialize(
         SetWindowTheme(tabs, wide("").as_ptr(), wide("").as_ptr());
     }
     let mut pages = Vec::new();
-    for title in ["Mapping Profile", "Event diagnostics", "Settings", "Help"] {
+    for title in tab_titles() {
         let index = pages.len();
-        let mut name = wide(title);
+        let mut name = wide(&title);
         let tab = TCITEMW {
             mask: TCIF_TEXT,
             pszText: name.as_mut_ptr(),
@@ -495,14 +546,14 @@ pub fn initialize(
     let help_page = pages[HELP_PAGE].window;
     let introduction = text_block(
         help_page,
-        &typing_host::help::introduction_text(),
+        typing_host::help::introduction_message(),
         INTRODUCTION,
     )?;
     pages[HELP_PAGE].controls.push(introduction);
     let open_guide = child(
         pages[HELP_PAGE].window,
         "BUTTON",
-        "Open User &Guide…",
+        msg!("ui.open_user_guide", "Open User Guide…"),
         WS_TABSTOP | BS_PUSHBUTTON as u32,
         OPEN_GUIDE,
     )?;
@@ -510,7 +561,7 @@ pub fn initialize(
     let about = child(
         pages[HELP_PAGE].window,
         "BUTTON",
-        "&About",
+        msg!("ui.about", "About"),
         WS_TABSTOP | BS_PUSHBUTTON as u32,
         ABOUT,
     )?;
@@ -518,7 +569,7 @@ pub fn initialize(
     let keyboard_events = child(
         pages[EVENTS_PAGE].window,
         "BUTTON",
-        "Show &keyboard events",
+        msg!("ui.show_keyboard_events", "Show keyboard events"),
         WS_TABSTOP | BS_AUTOCHECKBOX as u32,
         KEY_EVENTS,
     )?;
@@ -527,12 +578,18 @@ pub fn initialize(
     }
     let key_list = list(
         pages[EVENTS_PAGE].window,
-        &["Event", "Key code", "Shift", "Alt", "Control"],
+        &[
+            msg!("ui.event", "Event"),
+            msg!("ui.key_code", "Key code"),
+            msg!("ui.shift", "Shift"),
+            msg!("ui.alt", "Alt"),
+            msg!("ui.control", "Control"),
+        ],
     )?;
     let clear_events = child(
         pages[EVENTS_PAGE].window,
         "BUTTON",
-        "&Clear",
+        msg!("ui.clear", "Clear"),
         WS_TABSTOP,
         CLEAR_EVENTS,
     )?;
@@ -542,11 +599,11 @@ pub fn initialize(
     if cfg!(debug_assertions) {
         let parent = pages[EVENTS_PAGE].window;
         for (title, id) in [
-            ("Start keyboard", ENABLE),
-            ("Stop keyboard", DISABLE),
-            ("Right Shift down", SHIFT_DOWN),
-            ("Right Shift up", SHIFT_UP),
-            ("Left key down", LEFT_DOWN),
+            (msg!("ui.start_keyboard", "Start keyboard"), ENABLE),
+            (msg!("ui.stop_keyboard", "Stop keyboard"), DISABLE),
+            (msg!("ui.right_shift_down", "Right Shift down"), SHIFT_DOWN),
+            (msg!("ui.right_shift_up", "Right Shift up"), SHIFT_UP),
+            (msg!("ui.left_key_down", "Left key down"), LEFT_DOWN),
         ] {
             pages[EVENTS_PAGE].controls.push(child(
                 parent,
@@ -559,21 +616,39 @@ pub fn initialize(
     }
     pages[BINDINGS_PAGE].controls = profiles::initialize(window, pages[BINDINGS_PAGE].window)?;
     let settings_page = pages[SETTINGS_PAGE].window;
+    let language_label = child(
+        settings_page,
+        "STATIC",
+        msg!("language.label", "Language:"),
+        0,
+        LANGUAGE_LABEL,
+    )?;
+    let language_choice = child(
+        settings_page,
+        "COMBOBOX",
+        "",
+        WS_TABSTOP | WS_VSCROLL | CBS_DROPDOWNLIST as u32,
+        LANGUAGE,
+    )?;
     pages[SETTINGS_PAGE].controls.push(child(
         settings_page,
         "BUTTON",
-        "Start with &Windows",
+        msg!("ui.start_with_windows", "Start with Windows"),
         WS_TABSTOP | BS_CHECKBOX as u32 | BS_MULTILINE as u32,
         START_WITH_WINDOWS,
     )?);
     pages[SETTINGS_PAGE].controls.push(text_block(
         settings_page,
-        "Start Typing in the system tray when you sign in.\r\nIf you move the Typing folder, enable this option again from its new location.",
+        msg!("ui.start_typing_in_the_system_tray", "Start Typing in the system tray when you sign in.\r\nIf you move the Typing folder, enable this option again from its new location."),
         0,
     )?);
     pages[SETTINGS_PAGE]
         .controls
         .push(text_block(settings_page, "", 0)?);
+    let language_error = text_block(settings_page, "", LANGUAGE_ERROR)?;
+    pages[SETTINGS_PAGE]
+        .controls
+        .extend([language_label, language_choice, language_error]);
 
     let saved_size = std::fs::read_to_string(&preference)
         .ok()
@@ -605,6 +680,7 @@ pub fn initialize(
         icons: [0; 3],
         icon: usize::MAX,
         events,
+        displayed_events: std::collections::VecDeque::new(),
         key_list,
         keyboard_events,
         startup_checked: None,
@@ -626,18 +702,25 @@ pub fn initialize(
             )
         };
         if result < 0 {
-            return Err(format!(
-                "load embedded tray icon {id}: HRESULT {result:#010x}"
+            return Err(msg!(
+                "ui.load_embedded_tray_icon_hresult",
+                "load embedded tray icon {id}: HRESULT {result}",
+                id = id,
+                result = format!("{value:#010x}", value = result)
             ));
         }
     }
     desktop.set_font();
     desktop.refresh_startup();
+    desktop.refresh_languages(true);
     desktop.power_notifications = compatibility::PowerNotification::register(window)?;
     desktop.session_notifications =
         unsafe { WTSRegisterSessionNotification(window, NOTIFY_FOR_THIS_SESSION) } != 0;
     if !desktop.session_notifications {
-        return Err(last_error("register session notifications"));
+        return Err(last_error(&msg!(
+            "windows.operation.register_session_notifications",
+            "register session notifications"
+        )));
     }
     desktop.desktop_notifications = unsafe {
         SetWinEventHook(
@@ -651,7 +734,10 @@ pub fn initialize(
         )
     };
     if desktop.desktop_notifications == 0 {
-        return Err(last_error("register desktop notifications"));
+        return Err(last_error(&msg!(
+            "windows.operation.register_desktop_notifications",
+            "register desktop notifications"
+        )));
     }
     if !desktop_ready() {
         desktop.pause_reasons |= 4;
@@ -662,16 +748,86 @@ pub fn initialize(
     icon.uCallbackMessage = WM_TRAY;
     icon.hIcon = desktop.icons[0];
     if unsafe { Shell_NotifyIconW(NIM_ADD, &icon) } == 0 {
-        return Err(last_error("create tray icon"));
+        return Err(last_error(&msg!(
+            "windows.operation.create_tray_icon",
+            "create tray icon"
+        )));
     }
     if unsafe { SetTimer(window, TIMER, 50, None) } == 0 {
-        return Err(last_error("create feedback timer"));
+        return Err(last_error(&msg!(
+            "windows.operation.create_feedback_timer",
+            "create feedback timer"
+        )));
     }
     UI.with(|cell| *cell.borrow_mut() = Some(desktop));
     Ok(())
 }
 
 impl Desktop {
+    fn refresh_languages(&mut self, rescan: bool) {
+        let (labels, selected, notice) = language::choices(rescan);
+        let combo = self.pages[SETTINGS_PAGE].controls[4];
+        unsafe {
+            SendMessageW(combo, CB_RESETCONTENT, 0, 0);
+            for label in labels {
+                SendMessageW(combo, CB_ADDSTRING, 0, wide(&label).as_ptr() as isize);
+            }
+            SendMessageW(combo, CB_SETCURSEL, selected, 0);
+        }
+        language::set_caption(
+            self.pages[SETTINGS_PAGE].controls[5],
+            &notice.unwrap_or_default(),
+        );
+    }
+    fn finish_language_change(&mut self, changed: bool) {
+        let focus = unsafe { GetFocus() };
+        if changed {
+            language::set_caption(
+                self.overlay.window,
+                &msg!("ui.cursor_feedback", "Typing cursor feedback"),
+            );
+            for (index, title) in tab_titles().iter().enumerate() {
+                let mut text = wide(title);
+                let item = TCITEMW {
+                    mask: TCIF_TEXT,
+                    pszText: text.as_mut_ptr(),
+                    ..unsafe { std::mem::zeroed() }
+                };
+                unsafe {
+                    SendMessageW(self.tabs, TCM_SETITEMW, index, &item as *const _ as isize);
+                }
+            }
+            for (index, event) in self.displayed_events.iter().enumerate() {
+                let text = if event.down {
+                    msg!("ui.down", "Down")
+                } else {
+                    msg!("ui.up", "Up")
+                };
+                let mut text = wide(&text);
+                let item = LVITEMW {
+                    iSubItem: 0,
+                    pszText: text.as_mut_ptr(),
+                    ..unsafe { std::mem::zeroed() }
+                };
+                unsafe {
+                    SendMessageW(
+                        self.key_list,
+                        LVM_SETITEMTEXTW,
+                        index,
+                        &item as *const _ as isize,
+                    );
+                }
+            }
+        }
+        self.refresh_languages(false);
+        self.layout();
+        unsafe {
+            if IsWindow(focus) != 0 {
+                SetFocus(focus);
+            }
+            InvalidateRect(self.window, std::ptr::null(), 1);
+        }
+    }
     fn draw_tab(&self, item: &DRAWITEMSTRUCT) {
         let selected =
             item.itemID as isize == unsafe { SendMessageW(self.tabs, TCM_GETCURSEL, 0, 0) };
@@ -733,10 +889,8 @@ impl Desktop {
         }
     }
 
-    fn startup_status(&self, text: &str) {
-        unsafe {
-            SetWindowTextW(self.pages[SETTINGS_PAGE].controls[2], wide(text).as_ptr());
-        }
+    fn startup_status(&self, text: &(impl MessageValue + ?Sized)) {
+        language::set_caption(self.pages[SETTINGS_PAGE].controls[2], &Message::value(text));
     }
 
     fn refresh_startup(&mut self) {
@@ -756,8 +910,10 @@ impl Desktop {
                     EnableWindow(checkbox, 0);
                     SendMessageW(checkbox, BM_SETCHECK, BST_UNCHECKED as usize, 0);
                 }
-                self.startup_status(&format!(
-                    "Could not read Start with Windows. {error} Reopen Settings to try again."
+                self.startup_status(&msg!(
+                    "ui.could_not_read_start_with_windows",
+                    "Could not read Start with Windows. {error} Reopen Settings to try again.",
+                    error = error
                 ));
             }
         }
@@ -783,7 +939,11 @@ impl Desktop {
             Err(error) => {
                 // BS_CHECKBOX is manual: the confirmed state remains visible
                 // until the registry operation succeeds.
-                self.startup_status(&format!("Could not change Start with Windows. {error}"));
+                self.startup_status(&msg!(
+                    "ui.could_not_change_start_with_windows",
+                    "Could not change Start with Windows. {error}",
+                    error = error
+                ));
             }
         }
         self.layout_page(SETTINGS_PAGE);
@@ -889,6 +1049,7 @@ impl Desktop {
     fn show(&mut self) {
         if self.selected == SETTINGS_PAGE {
             self.refresh_startup();
+            self.refresh_languages(true);
         }
         SHARED.get().unwrap().editor_active.store(
             matches!(self.selected, BINDINGS_PAGE | SETTINGS_PAGE | HELP_PAGE),
@@ -940,12 +1101,27 @@ impl Desktop {
                 placement.showCmd = SW_SHOWNORMAL as u32;
                 placement.flags = 0;
                 if SetWindowPlacement(self.window, &placement) == 0 {
-                    logging::error("window", format_args!("{}", last_error("show main window")));
+                    logging::error(
+                        "window",
+                        format_args!(
+                            "{}",
+                            last_error(&msg!(
+                                "windows.operation.show_main_window",
+                                "show main window"
+                            ))
+                        ),
+                    );
                 }
             } else {
                 logging::error(
                     "window",
-                    format_args!("{}", last_error("read window placement")),
+                    format_args!(
+                        "{}",
+                        last_error(&msg!(
+                            "windows.operation.read_window_placement",
+                            "read window placement"
+                        ))
+                    ),
                 );
             }
             // Visibility is an explicit user request, independent of the
@@ -962,7 +1138,13 @@ impl Desktop {
             {
                 logging::error(
                     "window",
-                    format_args!("{}", last_error("display main window")),
+                    format_args!(
+                        "{}",
+                        last_error(&msg!(
+                            "windows.operation.display_main_window",
+                            "display main window"
+                        ))
+                    ),
                 );
             }
             SetForegroundWindow(self.window);
@@ -1069,7 +1251,62 @@ impl Desktop {
         } else if index == BINDINGS_PAGE {
             (positions, y) = profiles::layout(page, width, unit, gap);
         } else if index == SETTINGS_PAGE {
-            for (index, &window) in page.controls.iter().enumerate() {
+            let label = page.controls[3];
+            let combo = page.controls[4];
+            let label_width = profiles::control_width(label, 0, unit).min(width);
+            let mut combo_width = unit * 10;
+            let count = unsafe { SendMessageW(combo, CB_GETCOUNT, 0, 0) };
+            for item in 0..count.max(0) {
+                let length = unsafe { SendMessageW(combo, CB_GETLBTEXTLEN, item as usize, 0) };
+                if length < 0 {
+                    continue;
+                }
+                let mut text = vec![0u16; length as usize + 1];
+                unsafe {
+                    SendMessageW(
+                        combo,
+                        CB_GETLBTEXT,
+                        item as usize,
+                        text.as_mut_ptr() as isize,
+                    );
+                }
+                let mut size: SIZE = unsafe { std::mem::zeroed() };
+                unsafe {
+                    let dc = GetDC(combo);
+                    let old = SelectObject(dc, self.font);
+                    GetTextExtentPoint32W(dc, text.as_ptr(), length as i32, &mut size);
+                    SelectObject(dc, old);
+                    ReleaseDC(combo, dc);
+                }
+                combo_width = combo_width.max(size.cx + unit * 2 + gap * 2);
+            }
+            combo_width = combo_width.min(width);
+            positions.push((label, gap, y, label_width, control_height));
+            let combo_x = if label_width + gap + combo_width <= width {
+                gap + label_width + gap
+            } else {
+                y += control_height + gap;
+                gap
+            };
+            positions.push((combo, combo_x, y, combo_width, control_height * 8));
+            y += control_height + gap;
+            let error = page.controls[5];
+            let error_height = text_block_height(error, width);
+            unsafe {
+                ShowWindow(
+                    error,
+                    if error_height == 0 {
+                        SW_HIDE
+                    } else {
+                        SW_SHOWNA
+                    },
+                );
+            }
+            positions.push((error, gap, y, width, error_height));
+            if error_height > 0 {
+                y += error_height + gap;
+            }
+            for (index, &window) in page.controls[..3].iter().enumerate() {
                 if index != 0 {
                     let height = text_block_height(window, width);
                     unsafe {
@@ -1225,7 +1462,16 @@ impl Desktop {
             data.uFlags = NIF_ICON;
             data.hIcon = self.icons[icon];
             if unsafe { Shell_NotifyIconW(NIM_MODIFY, &data) } == 0 {
-                logging::error("tray", format_args!("{}", last_error("update tray icon")));
+                logging::error(
+                    "tray",
+                    format_args!(
+                        "{}",
+                        last_error(&msg!(
+                            "windows.operation.update_tray_icon",
+                            "update tray icon"
+                        ))
+                    ),
+                );
             }
             self.icon = icon;
         }
@@ -1239,6 +1485,8 @@ impl Desktop {
             if unsafe { SendMessageW(self.keyboard_events, BM_GETCHECK, 0, 0) }
                 == BST_CHECKED as isize
             {
+                self.displayed_events.push_front(event.clone());
+                self.displayed_events.truncate(100);
                 let DiagnosticEvent {
                     key,
                     down,
@@ -1249,7 +1497,11 @@ impl Desktop {
                 row(
                     self.key_list,
                     &[
-                        if down { "Down" } else { "Up" }.into(),
+                        language::render(&if down {
+                            msg!("ui.down", "Down")
+                        } else {
+                            msg!("ui.up", "Up")
+                        }),
                         key.to_string(),
                         shift.to_string(),
                         alt.to_string(),
@@ -1344,7 +1596,13 @@ impl Desktop {
                 if updated == 0 {
                     logging::error(
                         "overlay",
-                        format_args!("{}", last_error("draw cursor overlay")),
+                        format_args!(
+                            "{}",
+                            last_error(&msg!(
+                                "windows.operation.draw_cursor_overlay",
+                                "draw cursor overlay"
+                            ))
+                        ),
                     );
                 }
             }
@@ -1386,13 +1644,25 @@ impl Drop for Desktop {
             if self.session_notifications && WTSUnRegisterSessionNotification(self.window) == 0 {
                 logging::warning(
                     "desktop",
-                    format_args!("{}", last_error("unregister session notifications")),
+                    format_args!(
+                        "{}",
+                        last_error(&msg!(
+                            "windows.operation.unregister_session_notifications",
+                            "unregister session notifications"
+                        ))
+                    ),
                 );
             }
             if self.desktop_notifications != 0 && UnhookWinEvent(self.desktop_notifications) == 0 {
                 logging::warning(
                     "desktop",
-                    format_args!("{}", last_error("unregister desktop notifications")),
+                    format_args!(
+                        "{}",
+                        last_error(&msg!(
+                            "windows.operation.unregister_desktop_notifications",
+                            "unregister desktop notifications"
+                        ))
+                    ),
                 );
             }
             let icon = self.tray_data();
@@ -1427,6 +1697,26 @@ pub fn shutdown() {
 }
 
 pub fn message(window: HWND, message: u32, w: WPARAM, l: LPARAM) -> Option<LRESULT> {
+    if message == WM_APP + 85 {
+        let selected = UI.with(|cell| {
+            cell.borrow().as_ref().map(|ui| unsafe {
+                SendMessageW(ui.pages[SETTINGS_PAGE].controls[4], CB_GETCURSEL, 0, 0)
+            })
+        });
+        if let Some(selected) = selected.filter(|i| *i >= 0) {
+            let changed = language::select(selected as usize).is_ok();
+            if changed {
+                language::refresh_captions();
+                profiles::language_changed();
+            }
+            UI.with(|cell| {
+                if let Some(ui) = cell.borrow_mut().as_mut() {
+                    ui.finish_language_change(changed);
+                }
+            });
+        }
+        return Some(0);
+    }
     if message == WM_APP + 41 {
         // The guide's modal loop must run without borrowing Desktop.
         if let Err(error) = guide::show(window) {
@@ -1434,7 +1724,7 @@ pub fn message(window: HWND, message: u32, w: WPARAM, l: LPARAM) -> Option<LRESU
                 MessageBoxW(
                     window,
                     wide(&error).as_ptr(),
-                    wide("Typing User Guide").as_ptr(),
+                    wide(&msg!("ui.typing_user_guide", "Typing User Guide")).as_ptr(),
                     MB_OK | MB_ICONERROR,
                 );
             }
@@ -1491,9 +1781,16 @@ pub fn message(window: HWND, message: u32, w: WPARAM, l: LPARAM) -> Option<LRESU
                 Some(0)
             }
             WM_COMMAND if w & 0xffff == CLEAR_EVENTS => {
+                ui.displayed_events.clear();
                 while ui.events.try_recv().is_ok() {}
                 unsafe {
                     SendMessageW(ui.key_list, LVM_DELETEALLITEMS, 0, 0);
+                }
+                Some(0)
+            }
+            WM_COMMAND if w & 0xffff == LANGUAGE && w >> 16 == CBN_SELCHANGE as usize => {
+                unsafe {
+                    PostMessageW(window, WM_APP + 85, 0, 0);
                 }
                 Some(0)
             }
@@ -1523,6 +1820,7 @@ pub fn message(window: HWND, message: u32, w: WPARAM, l: LPARAM) -> Option<LRESU
                     ui.selected = unsafe { SendMessageW(ui.tabs, TCM_GETCURSEL, 0, 0) } as usize;
                     if ui.selected == SETTINGS_PAGE {
                         ui.refresh_startup();
+                        ui.refresh_languages(true);
                     }
                     SHARED.get().unwrap().editor_active.store(
                         matches!(ui.selected, BINDINGS_PAGE | SETTINGS_PAGE | HELP_PAGE),

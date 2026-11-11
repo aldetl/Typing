@@ -1,5 +1,6 @@
 //! Current-user Windows sign-in registration. No INI enablement flag is stored.
 use std::{os::windows::ffi::OsStrExt, path::Path};
+use typing_core::{Message, msg};
 use windows_sys::Win32::{Foundation::*, System::Registry::*};
 
 const RUN_KEY: &str = r"Software\Microsoft\Windows\CurrentVersion\Run";
@@ -10,22 +11,28 @@ fn wide(value: &str) -> Vec<u16> {
     value.encode_utf16().chain(Some(0)).collect()
 }
 
-fn error(operation: &str, code: u32) -> String {
-    format!(
-        "{operation}: {}",
-        std::io::Error::from_raw_os_error(code as i32)
+fn error(operation: &(impl typing_core::MessageValue + ?Sized), code: u32) -> Message {
+    msg!(
+        "startup.detail",
+        "{operation}: {arg0}",
+        operation = operation,
+        arg0 = std::io::Error::from_raw_os_error(code as i32)
     )
 }
 
-fn command(executable: &Path) -> Result<Vec<u16>, String> {
+fn command(executable: &Path) -> Result<Vec<u16>, Message> {
     let path: Vec<_> = executable.as_os_str().encode_wide().collect();
     if !executable.is_absolute() || path.iter().any(|&c| c == 0 || c == b'"' as u16) {
-        return Err(
-            "Startup requires an absolute executable path without quotes or NUL characters.".into(),
-        );
+        return Err(msg!(
+            "startup.startup_requires_an_absolute_executable_path",
+            "Startup requires an absolute executable path without quotes or NUL characters."
+        ));
     }
     if path.len() + 2 > MAX_COMMAND {
-        return Err("The executable path is too long for Windows startup. Move Typing to a shorter folder path and try again.".into());
+        return Err(msg!(
+            "startup.the_executable_path_is_too_long",
+            "The executable path is too long for Windows startup. Move Typing to a shorter folder path and try again."
+        ));
     }
     Ok(std::iter::once(b'"' as u16)
         .chain(path)
@@ -47,7 +54,7 @@ struct Registration<'a> {
 }
 
 impl Registration<'_> {
-    fn open(&self, access: u32, create: bool) -> Result<Option<Key>, String> {
+    fn open(&self, access: u32, create: bool) -> Result<Option<Key>, Message> {
         let mut key = 0;
         let name = wide(self.subkey);
         let code = unsafe {
@@ -76,11 +83,17 @@ impl Registration<'_> {
         match code {
             ERROR_SUCCESS => Ok(Some(Key(key))),
             ERROR_FILE_NOT_FOUND | ERROR_PATH_NOT_FOUND if !create => Ok(None),
-            _ => Err(error("Open Windows startup registration", code)),
+            _ => Err(error(
+                &msg!(
+                    "windows.startup.open_windows_startup_registration",
+                    "Open Windows startup registration"
+                ),
+                code,
+            )),
         }
     }
 
-    fn matches(&self, executable: &Path) -> Result<bool, String> {
+    fn matches(&self, executable: &Path) -> Result<bool, Message> {
         // An overlong current location cannot match a valid Run command.
         let expected = command(executable);
         let Some(key) = self.open(KEY_QUERY_VALUE, false)? else {
@@ -106,11 +119,17 @@ impl Registration<'_> {
                     && size as usize == expected.len() * 2
                     && data[..expected.len()] == expected
             })),
-            _ => Err(error("Read Windows startup registration", code)),
+            _ => Err(error(
+                &msg!(
+                    "windows.startup.read_windows_startup_registration",
+                    "Read Windows startup registration"
+                ),
+                code,
+            )),
         }
     }
 
-    fn enable(&self, executable: &Path) -> Result<(), String> {
+    fn enable(&self, executable: &Path) -> Result<(), Message> {
         let command = command(executable)?;
         let key = self.open(KEY_SET_VALUE, true)?.unwrap();
         let code = unsafe {
@@ -126,11 +145,17 @@ impl Registration<'_> {
         if code == ERROR_SUCCESS {
             Ok(())
         } else {
-            Err(error("Enable Start with Windows", code))
+            Err(error(
+                &msg!(
+                    "windows.startup.enable_start_with_windows",
+                    "Enable Start with Windows"
+                ),
+                code,
+            ))
         }
     }
 
-    fn disable(&self) -> Result<(), String> {
+    fn disable(&self) -> Result<(), Message> {
         let Some(key) = self.open(KEY_SET_VALUE, false)? else {
             return Ok(());
         };
@@ -138,20 +163,28 @@ impl Registration<'_> {
         if matches!(code, ERROR_SUCCESS | ERROR_FILE_NOT_FOUND) {
             Ok(())
         } else {
-            Err(error("Cancel Start with Windows", code))
+            Err(error(
+                &msg!(
+                    "windows.startup.cancel_start_with_windows",
+                    "Cancel Start with Windows"
+                ),
+                code,
+            ))
         }
     }
 }
 
-pub fn is_registered() -> Result<bool, String> {
-    let executable = std::env::current_exe().map_err(|e| format!("Locate Typing: {e}"))?;
+pub fn is_registered() -> Result<bool, Message> {
+    let executable = std::env::current_exe()
+        .map_err(|e| msg!("startup.locate_typing", "Locate Typing: {e}", e = e))?;
     Registration { subkey: RUN_KEY }.matches(&executable)
 }
 
-pub fn set_enabled(enabled: bool) -> Result<(), String> {
+pub fn set_enabled(enabled: bool) -> Result<(), Message> {
     let registration = Registration { subkey: RUN_KEY };
     if enabled {
-        let executable = std::env::current_exe().map_err(|e| format!("Locate Typing: {e}"))?;
+        let executable = std::env::current_exe()
+            .map_err(|e| msg!("startup.locate_typing", "Locate Typing: {e}", e = e))?;
         registration.enable(&executable)
     } else {
         registration.disable()

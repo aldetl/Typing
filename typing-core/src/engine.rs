@@ -96,6 +96,19 @@ impl fmt::Display for CoreError {
 
 impl std::error::Error for CoreError {}
 
+impl CoreError {
+    pub fn diagnostic(&self) -> crate::Message {
+        match self {
+            Self::Busy => crate::msg!("core.busy", "an execution still needs completion"),
+            Self::Paused => crate::msg!("core.paused", "command admission is paused"),
+            Self::ForeignExecution => crate::msg!(
+                "core.foreign",
+                "execution does not belong to this core's active command"
+            ),
+        }
+    }
+}
+
 /// Must be returned to the same Core after the host finishes the action.
 /// The private identity prevents duplicate or foreign completion bookkeeping.
 #[derive(Debug)]

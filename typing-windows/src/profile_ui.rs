@@ -45,34 +45,34 @@ fn text(window: HWND) -> String {
         unsafe { GetWindowTextW(window, buffer.as_mut_ptr(), buffer.len() as i32) }.max(0) as usize;
     String::from_utf16_lossy(&buffer[..len])
 }
-fn set_text(window: HWND, value: &str) {
-    if text(window) != value {
-        unsafe {
-            SetWindowTextW(window, wide(value).as_ptr());
-        }
+fn set_text(window: HWND, value: &(impl MessageValue + ?Sized)) {
+    let value = Message::value(value);
+    language::remember(window, &value);
+    if text(window) != language::window_text(window, &value) {
+        language::set_caption(window, &value);
     }
 }
-fn alert(window: HWND, message: &str) {
+fn alert(window: HWND, message: &(impl MessageValue + ?Sized)) {
     unsafe {
         MessageBoxW(
             window,
             wide(message).as_ptr(),
-            wide("Typing profiles").as_ptr(),
+            wide(&msg!("ui.typing_profiles", "Typing profiles")).as_ptr(),
             MB_OK | MB_ICONERROR,
         );
     }
 }
-fn ask(window: HWND, message: &str, style: u32) -> i32 {
+fn ask(window: HWND, message: &(impl MessageValue + ?Sized), style: u32) -> i32 {
     unsafe {
         MessageBoxW(
             window,
             wide(message).as_ptr(),
-            wide("Typing profiles").as_ptr(),
+            wide(&msg!("ui.typing_profiles", "Typing profiles")).as_ptr(),
             style,
         )
     }
 }
-fn combo(parent: HWND, id: usize, values: &[&str]) -> Result<HWND, String> {
+fn combo(parent: HWND, id: usize, values: &[impl MessageValue]) -> Result<HWND, Message> {
     let control = child(
         parent,
         "COMBOBOX",
@@ -230,10 +230,10 @@ unsafe extern "system" fn name_prompt_proc(
 
 fn name_prompt(
     owner: HWND,
-    title: &str,
+    title: impl MessageValue,
     initial: &str,
     choices: Option<&[&str]>,
-) -> Result<Option<String>, String> {
+) -> Result<Option<String>, Message> {
     static CLASS: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     if !CLASS.get_or_init(|| {
         let name = wide("TypingProfileNameDialog");
@@ -247,7 +247,10 @@ fn name_prompt(
         };
         unsafe { RegisterClassW(&class) != 0 }
     }) {
-        return Err(last_error("register profile name dialog"));
+        return Err(last_error(&msg!(
+            "windows.operation.register_profile_name_dialog",
+            "register profile name dialog"
+        )));
     }
     let dpi = compatibility::window_dpi(owner);
     let mut owner_bounds: RECT = unsafe { std::mem::zeroed() };
@@ -258,7 +261,7 @@ fn name_prompt(
         CreateWindowExW(
             WS_EX_CONTROLPARENT,
             wide("TypingProfileNameDialog").as_ptr(),
-            wide(title).as_ptr(),
+            wide(&title).as_ptr(),
             WS_OVERLAPPED | WS_CAPTION | WS_SYSMENU,
             owner_bounds.left + scale(30, dpi),
             owner_bounds.top + scale(30, dpi),
@@ -271,17 +274,20 @@ fn name_prompt(
         )
     };
     if window == 0 {
-        return Err(last_error("create profile name dialog"));
+        return Err(last_error(&msg!(
+            "windows.operation.create_profile_name_dialog",
+            "create profile name dialog"
+        )));
     }
-    let controls = (|| -> Result<Vec<HWND>, String> {
+    let controls = (|| -> Result<Vec<HWND>, Message> {
         Ok(vec![
             child(
                 window,
                 "STATIC",
                 if choices.is_some() {
-                    "Profile"
+                    msg!("ui.profile_choice", "Profile")
                 } else {
-                    "Profile name"
+                    msg!("ui.profile_name", "Profile name")
                 },
                 0,
                 0,
@@ -312,7 +318,13 @@ fn name_prompt(
                 WS_TABSTOP | BS_DEFPUSHBUTTON as u32,
                 3201,
             )?,
-            child(window, "BUTTON", "Cancel", WS_TABSTOP, 3202)?,
+            child(
+                window,
+                "BUTTON",
+                msg!("ui.cancel", "Cancel"),
+                WS_TABSTOP,
+                3202,
+            )?,
         ])
     })();
     let controls = match controls {
@@ -382,14 +394,25 @@ fn name_prompt(
     Ok(prompt.result.take())
 }
 
-fn file_dialog(owner: HWND, save: bool, legacy: bool) -> Result<Option<PathBuf>, String> {
+fn file_dialog(owner: HWND, save: bool, legacy: bool) -> Result<Option<PathBuf>, Message> {
     let mut filename = vec![0u16; 32768];
-    let filter = if legacy {
-        "Profiles and legacy INI\0*.ini\0All files\0*.*\0\0"
+    let mut filters = if legacy {
+        vec![(msg!("filters.legacy", "Profiles and legacy INI"), "*.ini")]
     } else {
-        "Typing profiles\0*.typing.ini\0INI files\0*.ini\0All files\0*.*\0\0"
+        vec![
+            (
+                msg!("ui.typing_profiles", "Typing profiles"),
+                "*.typing.ini",
+            ),
+            (msg!("filters.ini", "INI files"), "*.ini"),
+        ]
     };
-    let filter: Vec<u16> = filter.encode_utf16().collect();
+    filters.push((msg!("filters.all", "All files"), "*.*"));
+    let mut filter: Vec<u16> = filters
+        .iter()
+        .flat_map(|(name, pattern)| wide(name).into_iter().chain(wide(*pattern)))
+        .collect();
+    filter.push(0);
     let extension = wide("typing.ini");
     let mut dialog = OPENFILENAMEW {
         lStructSize: std::mem::size_of::<OPENFILENAMEW>() as u32,
@@ -420,7 +443,11 @@ fn file_dialog(owner: HWND, save: bool, legacy: bool) -> Result<Option<PathBuf>,
         return if code == 0 {
             Ok(None)
         } else {
-            Err(format!("File dialog failed: {code}"))
+            Err(msg!(
+                "profile_ui.file_dialog_failed",
+                "File dialog failed: {code}",
+                code = code
+            ))
         };
     }
     use std::os::windows::ffi::OsStringExt;
@@ -439,7 +466,7 @@ struct ProfileUi {
     selector: HWND,
     library: Library,
     available: Vec<AvailableProfile>,
-    discovery_errors: Vec<String>,
+    discovery_errors: Vec<Message>,
     list: HWND,
     document: Option<Document>,
     visible: Vec<usize>,
@@ -474,19 +501,34 @@ unsafe extern "system" fn compare_mapping_rank(first: LPARAM, second: LPARAM, _:
     }
 }
 
-pub fn initialize(owner: HWND, page: HWND) -> Result<Vec<HWND>, String> {
-    let label = child(page, "STATIC", "Profile:", 0, 0)?;
-    let selector = combo(page, PROFILE_LIST, &[])?;
-    let set_active = child(page, "BUTTON", "Set as &active", WS_TABSTOP, SET_ACTIVE)?;
+pub fn language_changed() {
+    PROFILES.with(|cell| {
+        if let Some(ui) = cell.borrow_mut().as_mut() {
+            ui.refresh_status();
+            ui.refresh_rows_preserving_selection();
+        }
+    });
+}
+
+pub fn initialize(owner: HWND, page: HWND) -> Result<Vec<HWND>, Message> {
+    let label = child(page, "STATIC", msg!("ui.profile", "Profile:"), 0, 0)?;
+    let selector = combo(page, PROFILE_LIST, &[] as &[Message])?;
+    let set_active = child(
+        page,
+        "BUTTON",
+        msg!("ui.set_as_active", "Set as active"),
+        WS_TABSTOP,
+        SET_ACTIVE,
+    )?;
     let mut controls = vec![label, selector];
     for (label, id) in [
-        ("Save", SAVE),
-        ("Save As...", SAVE_AS),
-        ("Rename...", RENAME),
-        ("New...", NEW),
-        ("Copy...", COPY),
-        ("Delete", PROFILE_DELETE),
-        ("Import...", IMPORT),
+        (msg!("ui.save", "Save"), SAVE),
+        (msg!("ui.save_as", "Save As..."), SAVE_AS),
+        (msg!("ui.rename", "Rename..."), RENAME),
+        (msg!("ui.new", "New..."), NEW),
+        (msg!("ui.copy", "Copy..."), COPY),
+        (msg!("ui.delete", "Delete"), PROFILE_DELETE),
+        (msg!("ui.import", "Import..."), IMPORT),
     ] {
         controls.push(child(
             page,
@@ -498,8 +540,18 @@ pub fn initialize(owner: HWND, page: HWND) -> Result<Vec<HWND>, String> {
     }
     let status = text_block(page, "", 0)?;
     controls.push(status);
-    controls.push(child(page, "STATIC", "Key mapping:", 0, 0)?);
-    for (label, id) in [("Add", ADD), ("Edit", EDIT), ("Delete", DELETE)] {
+    controls.push(child(
+        page,
+        "STATIC",
+        msg!("ui.key_mapping", "Key mapping:"),
+        0,
+        0,
+    )?);
+    for (label, id) in [
+        (msg!("ui.add", "Add"), ADD),
+        (msg!("ui.edit", "Edit"), EDIT),
+        (msg!("ui.delete", "Delete"), DELETE),
+    ] {
         controls.push(child(
             page,
             "BUTTON",
@@ -510,10 +562,19 @@ pub fn initialize(owner: HWND, page: HWND) -> Result<Vec<HWND>, String> {
     }
     let list = list(
         page,
-        &["Enabled", "Type", "Trigger", "Action", "Diagnostics"],
+        &[
+            msg!("lifecycle.enabled", "Enabled"),
+            msg!("ui.type", "Type"),
+            msg!("ui.trigger", "Trigger"),
+            msg!("ui.action", "Action"),
+            msg!("ui.diagnostics", "Diagnostics"),
+        ],
     )?;
     unsafe {
-        SetWindowTextW(list, wide("Profile key mappings").as_ptr());
+        language::set_caption(
+            list,
+            &msg!("ui.profile_key_mappings", "Profile key mappings"),
+        );
         SendMessageW(
             list,
             LVM_SETEXTENDEDLISTVIEWSTYLE,
@@ -684,49 +745,68 @@ impl ProfileUi {
             .global_hotkey
     }
     fn refresh_status(&self) {
-        let state = SHARED.get().unwrap().state.lock().unwrap();
+        let (profiles, transitioning) = {
+            let state = SHARED.get().unwrap().state.lock().unwrap();
+            (state.profiles.clone(), state.transitioning)
+        };
         let editor = self
             .document
             .as_ref()
-            .and_then(|d| {
-                Profile::parse(&d.text, state.profiles.application.settings.global_hotkey).ok()
-            })
-            .map(|p| p.name)
-            .unwrap_or_else(|| "Choose a profile, New, or Import".into());
+            .and_then(|d| Profile::parse(&d.text, profiles.application.settings.global_hotkey).ok())
+            .map(|p| Message::from(p.name))
+            .unwrap_or_else(|| {
+                msg!(
+                    "ui.choose_a_profile_new_or_import",
+                    "Choose a profile, New, or Import"
+                )
+            });
         let status = if let Some(document) = &self.document {
             if document.dirty() {
-                "Unsaved changes"
-            } else if state.profiles.is_active_revision(document) {
-                "Saved; active"
-            } else if state.profiles.is_current(document) {
-                "Saved; changes not active — Set as active to apply"
+                msg!("ui.unsaved_changes", "Unsaved changes")
+            } else if profiles.is_active_revision(document) {
+                msg!("ui.saved_active", "Saved; active")
+            } else if profiles.is_current(document) {
+                msg!(
+                    "ui.saved_changes_not_active_set_as",
+                    "Saved; changes not active — Set as active to apply"
+                )
             } else if document.path.is_none() {
-                "Not saved"
+                msg!("ui.not_saved", "Not saved")
             } else {
-                "Saved; inactive — Set as active to use"
+                msg!(
+                    "ui.saved_inactive_set_as_active_to",
+                    "Saved; inactive — Set as active to use"
+                )
             }
         } else {
-            ""
+            Message::default()
         };
-        let presentation = format!(
-            "Active: {}\r\nEditing: {editor} — {status}{}",
-            state.profiles.name(),
-            if state.profiles.pending.is_some() {
-                " — Activating saved profile..."
+        let presentation = msg!(
+            "profile_ui.active_editing",
+            "Active: {arg0}\r\nEditing: {editor} — {status}{arg1}",
+            arg0 = profiles.name(),
+            editor = editor,
+            status = status,
+            arg1 = if profiles.pending.is_some() {
+                Message::join(
+                    [
+                        Message::from(" — "),
+                        msg!("ui.activating", "Activating saved profile..."),
+                    ],
+                    "",
+                )
             } else {
-                ""
+                Message::default()
             }
         );
-        if text(self.status) != presentation {
+        if text(self.status) != language::render(&presentation) {
             set_text(self.status, &presentation);
             // Defer layout until profile/core borrows have been released.
             unsafe {
                 PostMessageW(self.owner, WM_LAYOUT_CONTENT, BINDINGS_PAGE, 0);
             }
         }
-        let busy = state.profiles.pending.is_some()
-            || state.profiles.completed.is_some()
-            || state.transitioning;
+        let busy = profiles.pending.is_some() || profiles.completed.is_some() || transitioning;
         unsafe {
             EnableWindow(self.list, i32::from(!busy && self.document.is_some()));
         }
@@ -750,8 +830,7 @@ impl ProfileUi {
             }
         }
         let can_delete = self.available.iter().any(|p| {
-            !state
-                .profiles
+            !profiles
                 .active
                 .as_ref()
                 .and_then(|c| c.document.path.as_ref())
@@ -800,13 +879,13 @@ impl ProfileUi {
 
     fn choose_name(
         &self,
-        title: &str,
+        title: impl MessageValue,
         initial: &str,
         except: Option<&Path>,
-    ) -> Result<Option<String>, String> {
+    ) -> Result<Option<String>, Message> {
         let mut initial = initial.to_string();
         loop {
-            let Some(name) = name_prompt(self.owner, title, &initial, None)? else {
+            let Some(name) = name_prompt(self.owner, &title, &initial, None)? else {
                 return Ok(None);
             };
             match self.library.check_name(&name, except, self.hotkey()) {
@@ -824,6 +903,9 @@ impl ProfileUi {
         self.refresh_rows();
     }
     fn refresh_rows_preserving_selection(&mut self) {
+        let top = unsafe { SendMessageW(self.list, LVM_GETTOPINDEX, 0, 0) };
+        let top_line = self.visible.get(top as usize).copied();
+        let horizontal = unsafe { GetScrollPos(self.list, SB_HORZ) };
         let mut selected = Vec::new();
         let mut index = usize::MAX;
         let focused = unsafe {
@@ -876,6 +958,29 @@ impl ProfileUi {
                 }
             }
         }
+        if let Some(top_line) = top_line
+            && let Some(target) = self.visible.iter().position(|line| *line == top_line)
+        {
+            let mut bounds = RECT {
+                left: LVIR_BOUNDS as i32,
+                ..unsafe { std::mem::zeroed() }
+            };
+            unsafe {
+                if SendMessageW(
+                    self.list,
+                    LVM_GETITEMRECT,
+                    0,
+                    &mut bounds as *mut _ as isize,
+                ) != 0
+                {
+                    let current = SendMessageW(self.list, LVM_GETTOPINDEX, 0, 0) as i32;
+                    let delta =
+                        (target as i32 - current).saturating_mul(bounds.bottom - bounds.top);
+                    let dx = horizontal - GetScrollPos(self.list, SB_HORZ);
+                    SendMessageW(self.list, LVM_SCROLL, dx as usize, delta as isize);
+                }
+            }
+        }
     }
     fn refresh_rows(&mut self) {
         self.visible.clear();
@@ -885,14 +990,15 @@ impl ProfileUi {
         if let Some(document) = &self.document {
             match Profile::parse(&document.text, self.hotkey()) {
                 Ok(profile) => {
-                    let mut messages: Vec<String> = profile
+                    let mut messages: Vec<Message> = profile
                         .warnings
                         .iter()
                         .filter(|warning| {
-                            !profile
-                                .entries
-                                .iter()
-                                .any(|entry| warning.starts_with(&format!("Line {}:", entry.line)))
+                            !profile.entries.iter().any(|entry| {
+                                warning
+                                    .argument("arg0")
+                                    .is_some_and(|line| line.to_string() == entry.line.to_string())
+                            })
                         })
                         .cloned()
                         .collect();
@@ -912,24 +1018,33 @@ impl ProfileUi {
                     for entry in profile.entries {
                         let mode = entry.command == typing_core::Command::ModeKey;
                         let scope = if mode {
-                            "Mode key"
+                            msg!("ui.mode_key", "Mode key")
                         } else if entry.section == "modekeys" {
-                            "Command mode"
+                            msg!("ui.command_mode", "Command mode")
                         } else {
-                            "Hotkey"
+                            msg!("ui.hotkey", "Hotkey")
                         };
                         let action = entry.command.label();
                         let warning = profile
                             .warnings
                             .iter()
-                            .filter(|w| w.starts_with(&format!("Line {}:", entry.line)))
+                            .filter(|w| {
+                                w.argument("arg0")
+                                    .is_some_and(|line| line.to_string() == entry.line.to_string())
+                            })
                             .cloned()
                             .collect::<Vec<_>>()
                             .join("; ");
                         rows.push((
                             entry.line,
                             entry.enabled,
-                            [String::new(), scope.into(), entry.input, action, warning],
+                            [
+                                String::new(),
+                                language::render(&scope),
+                                entry.input,
+                                language::render(&action),
+                                language::render(&warning),
+                            ],
                         ));
                     }
                     if let Some((column, ascending)) = self.sort {
@@ -953,7 +1068,7 @@ impl ProfileUi {
                 Err(error) => self.diagnostic(&error),
             }
         } else {
-            let error = SHARED.get().unwrap().state.lock().unwrap().profiles.error.clone().unwrap_or_else(|| "Choose a profile, New, or Import to edit mappings. Legacy configuration can be copied with Import.".into());
+            let error = SHARED.get().unwrap().state.lock().unwrap().profiles.error.clone().unwrap_or_else(|| msg!("ui.choose_a_profile_new_or_import_2", "Choose a profile, New, or Import to edit mappings. Legacy configuration can be copied with Import."));
             self.diagnostic(&error);
         }
         for error in &self.discovery_errors {
@@ -1033,7 +1148,7 @@ impl ProfileUi {
             }
         }
     }
-    fn diagnostic(&self, message: &str) {
+    fn diagnostic(&self, message: &(impl MessageValue + ?Sized)) {
         let index = unsafe { SendMessageW(self.list, LVM_GETITEMCOUNT, 0, 0) } as usize;
         row(
             self.list,
@@ -1042,7 +1157,7 @@ impl ProfileUi {
                 String::new(),
                 String::new(),
                 String::new(),
-                message.into(),
+                language::render(&Message::value(message)),
             ],
             false,
         );
@@ -1063,7 +1178,7 @@ impl ProfileUi {
             );
         }
     }
-    fn selected(&self) -> Result<Entry, String> {
+    fn selected(&self) -> Result<Entry, Message> {
         let index = unsafe {
             SendMessageW(
                 self.list,
@@ -1072,29 +1187,38 @@ impl ProfileUi {
                 LVNI_SELECTED as isize,
             )
         };
-        let line = self
-            .visible
-            .get(index as usize)
-            .ok_or("Select a mapping first")?;
+        let line = self.visible.get(index as usize).ok_or_else(|| {
+            msg!(
+                "profile_ui.select_a_mapping_first",
+                "Select a mapping first"
+            )
+        })?;
         Profile::parse(
             &self
                 .document
                 .as_ref()
-                .ok_or("Select or create a profile first")?
+                .ok_or_else(|| {
+                    msg!(
+                        "profile_ui.select_or_create_a_profile_first",
+                        "Select or create a profile first"
+                    )
+                })?
                 .text,
             self.hotkey(),
         )?
         .entries
         .into_iter()
         .find(|e| e.line == *line)
-        .ok_or_else(|| "Mapping selection is stale".into())
+        .ok_or_else(|| msg!("profile_ui.stale_selection", "Mapping selection is stale"))
     }
-    fn save(&mut self, save_as: bool) -> Result<bool, String> {
+    fn save(&mut self, save_as: bool) -> Result<bool, Message> {
         let hotkey = self.hotkey();
-        let document = self
-            .document
-            .as_mut()
-            .ok_or("Select or create a profile first")?;
+        let document = self.document.as_mut().ok_or_else(|| {
+            msg!(
+                "profile_ui.select_or_create_a_profile_first",
+                "Select or create a profile first"
+            )
+        })?;
         Profile::parse(&document.text, hotkey)?;
         let chosen = save_as;
         let Some(path) = (if save_as {
@@ -1113,11 +1237,16 @@ impl ProfileUi {
         loop {
             match self.library.save(document, &path, overwrite, hotkey) {
                 Ok(()) => return Ok(true),
-                Err(error) if error.starts_with("External change") => {
+                Err(error)
+                    if error.has_id("profiles.external_change_reload_save_as_or")
+                        || error.has_id("profiles.external_change_while_preparing_save_reload") =>
+                {
                     match ask(
                         self.owner,
-                        &format!(
-                            "{error}\r\n\r\nYes: overwrite the file. No: choose Reload or Save As. Cancel: keep editing."
+                        &msg!(
+                            "profile_ui.yes_overwrite_the_file_no_choose",
+                            "{error}\r\n\r\nYes: overwrite the file. No: choose Reload or Save As. Cancel: keep editing.",
+                            error = error
                         ),
                         MB_YESNOCANCEL | MB_ICONWARNING,
                     ) {
@@ -1125,7 +1254,10 @@ impl ProfileUi {
                         IDNO => {
                             match ask(
                                 self.owner,
-                                "Reload the file and discard this working copy?\r\nYes: reload. No: Save As. Cancel: keep editing.",
+                                &msg!(
+                                    "profile_ui.reload_the_file_and_discard_this",
+                                    "Reload the file and discard this working copy?\r\nYes: reload. No: Save As. Cancel: keep editing."
+                                ),
                                 MB_YESNOCANCEL | MB_ICONQUESTION,
                             ) {
                                 IDYES => {
@@ -1151,13 +1283,16 @@ impl ProfileUi {
             }
         }
     }
-    fn abandon(&mut self) -> Result<bool, String> {
+    fn abandon(&mut self) -> Result<bool, Message> {
         if !self.document.as_ref().is_some_and(Document::dirty) {
             return Ok(true);
         }
         match ask(
             self.owner,
-            "You have unsaved profile changes.\r\nSave them before continuing?\r\nYes: Save. No: Don't Save. Cancel: keep editing.",
+            &msg!(
+                "profile_ui.you_have_unsaved_profile_changes_save",
+                "You have unsaved profile changes.\r\nSave them before continuing?\r\nYes: Save. No: Don't Save. Cancel: keep editing."
+            ),
             MB_YESNOCANCEL | MB_ICONQUESTION,
         ) {
             IDYES => self.save(false),
@@ -1165,14 +1300,14 @@ impl ProfileUi {
             _ => Ok(false),
         }
     }
-    fn activate(&mut self, document: Document, replace_editor: bool) -> Result<(), String> {
+    fn activate(&mut self, document: Document, replace_editor: bool) -> Result<(), Message> {
         let shared = SHARED.get().unwrap();
         let mut state = shared.state.lock().unwrap();
         if state.target == Lifecycle::Quit || state.paused || state.transitioning {
-            return Err(
+            return Err(msg!(
+                "profile_ui.wait_for_the_current_lifecycle_operation",
                 "Wait for the current lifecycle operation to finish before activating a saved profile"
-                    .into(),
-            );
+            ));
         }
         state.profiles.prepare(document, replace_editor)?;
         if let Some(candidate) = &state.profiles.pending
@@ -1189,14 +1324,19 @@ impl ProfileUi {
         shared.ready.notify_one();
         Ok(())
     }
-    fn action(&mut self, id: usize) -> Result<(), String> {
+    fn action(&mut self, id: usize) -> Result<(), Message> {
         match id {
             NEW | COPY => {
                 let source = if id == COPY {
                     Some(
                         self.document
                             .as_ref()
-                            .ok_or("Create or select a profile first")?
+                            .ok_or_else(|| {
+                                msg!(
+                                    "profile_ui.create_or_select_a_profile_first",
+                                    "Create or select a profile first"
+                                )
+                            })?
                             .text
                             .clone(),
                     )
@@ -1205,9 +1345,9 @@ impl ProfileUi {
                 };
                 let Some(name) = self.choose_name(
                     if id == COPY {
-                        "Copy profile"
+                        msg!("ui.copy_profile", "Copy profile")
                     } else {
-                        "New profile"
+                        msg!("ui.new_profile", "New profile")
                     },
                     "",
                     None,
@@ -1249,8 +1389,8 @@ impl ProfileUi {
                 let Some(path) = file_dialog(self.owner, false, true)? else {
                     return Ok(());
                 };
-                let source =
-                    std::fs::read_to_string(&path).map_err(|e| format!("Read import: {e}"))?;
+                let source = std::fs::read_to_string(&path)
+                    .map_err(|e| msg!("profile_ui.read_import", "Read import: {e}", e = e))?;
                 let explicit = path
                     .file_name()
                     .is_some_and(|s| s.to_string_lossy().to_lowercase().ends_with(".typing.ini"))
@@ -1258,14 +1398,17 @@ impl ProfileUi {
                         .trim_start_matches('\u{feff}')
                         .lines()
                         .any(|line| line.trim().eq_ignore_ascii_case("[profile]"));
-                let imported =
-                    import_document(&source, explicit, "Imported profile", self.hotkey())?;
+                let default_name =
+                    language::render(&msg!("profiles.imported_name", "Imported profile"));
+                let imported = import_document(&source, explicit, &default_name, self.hotkey())?;
                 let initial = if explicit {
                     Profile::parse(&source, self.hotkey())?.name
                 } else {
-                    "Imported profile".into()
+                    default_name
                 };
-                let Some(name) = self.choose_name("Import profile", &initial, None)? else {
+                let Some(name) =
+                    self.choose_name(msg!("ui.import_profile", "Import profile"), &initial, None)?
+                else {
                     return Ok(());
                 };
                 if self.abandon()? {
@@ -1297,9 +1440,10 @@ impl ProfileUi {
                     .cloned()
                     .collect();
                 if inactive.is_empty() {
-                    return Err(
-                        "Set another profile as active before deleting the active profile".into(),
-                    );
+                    return Err(msg!(
+                        "profile_ui.set_another_profile_as_active_before",
+                        "Set another profile as active before deleting the active profile"
+                    ));
                 }
                 let names: Vec<_> = inactive.iter().map(|p| p.name.as_str()).collect();
                 let initial = self
@@ -1309,21 +1453,31 @@ impl ProfileUi {
                     .and_then(|path| inactive.iter().find(|p| same_file(&p.path, path)))
                     .map(|p| p.name.as_str())
                     .unwrap_or(names[0]);
-                let Some(name) = name_prompt(self.owner, "Delete profile", initial, Some(&names))?
+                let Some(name) = name_prompt(
+                    self.owner,
+                    msg!("ui.delete_profile", "Delete profile"),
+                    initial,
+                    Some(&names),
+                )?
                 else {
                     return Ok(());
                 };
                 let matching: Vec<_> = inactive.iter().filter(|p| p.name == name).collect();
                 if matching.len() != 1 {
-                    return Err(
-                        "Rename duplicate profiles to distinguish them before deletion".into(),
-                    );
+                    return Err(msg!(
+                        "profile_ui.rename_duplicate_profiles_to_distinguish_them",
+                        "Rename duplicate profiles to distinguish them before deletion"
+                    ));
                 }
                 let path = matching[0].path.clone();
                 let mut document = Document::open(&path, self.hotkey())?;
                 if ask(
                     self.owner,
-                    &format!("Delete profile {name}? This removes its saved file."),
+                    &msg!(
+                        "profile_ui.delete_profile_this_removes_its_saved",
+                        "Delete profile {name}? This removes its saved file.",
+                        name = name
+                    ),
                     MB_YESNO | MB_ICONWARNING,
                 ) != IDYES
                 {
@@ -1369,7 +1523,10 @@ impl ProfileUi {
             }
             ADD | EDIT => {
                 if self.document.is_none() {
-                    return Err("Choose a profile, New, or Import first".into());
+                    return Err(msg!(
+                        "profile_ui.choose_a_profile_new_or_import",
+                        "Choose a profile, New, or Import first"
+                    ));
                 }
                 let old = if id == EDIT {
                     Some(self.selected()?)
@@ -1397,14 +1554,18 @@ impl ProfileUi {
                 self.document.as_mut().unwrap().delete(entry.line);
             }
             RENAME => {
-                let document = self
-                    .document
-                    .as_ref()
-                    .ok_or("Create or select a profile first")?;
+                let document = self.document.as_ref().ok_or_else(|| {
+                    msg!(
+                        "profile_ui.create_or_select_a_profile_first",
+                        "Create or select a profile first"
+                    )
+                })?;
                 let initial = Profile::parse(&document.text, self.hotkey())?.name;
-                if let Some(name) =
-                    self.choose_name("Rename profile", &initial, document.path.as_deref())?
-                {
+                if let Some(name) = self.choose_name(
+                    msg!("ui.rename_profile", "Rename profile"),
+                    &initial,
+                    document.path.as_deref(),
+                )? {
                     self.document.as_mut().unwrap().rename(&name)?;
                 }
             }
@@ -1468,14 +1629,16 @@ pub fn profile_status() {
         let path = candidate.document.path.as_ref().unwrap();
         let mut errors = Vec::new();
         if let Err(error) = app.remember(path) {
-            errors.push(format!(
-                "Profile is active for this run; remembering selection failed: {error}"
+            errors.push(msg!(
+                "profile_ui.profile_is_active_for_this_run",
+                "Profile is active for this run; remembering selection failed: {error}",
+                error = error
             ));
         } else {
             shared.state.lock().unwrap().profiles.application = app;
         }
         if std::fs::read(path).ok().as_deref() != candidate.document.fingerprint.as_deref() {
-            errors.push("The profile source changed after validation. The exact validated snapshot remains active.".into());
+            errors.push(msg!("profile_ui.the_profile_source_changed_after_validation", "The profile source changed after validation. The exact validated snapshot remains active."));
         }
         if !errors.is_empty() {
             for error in &errors {
@@ -1654,31 +1817,37 @@ pub fn message(_: HWND, message: u32, w: WPARAM, l: LPARAM) -> Option<LRESULT> {
     Some(0)
 }
 
-const ACTIONS: &[(&str, &str)] = &[
-    ("Output shortcut", ""),
-    ("Move left", "Left"),
-    ("Move right", "Right"),
-    ("Move up", "Up"),
-    ("Move down", "Down"),
-    ("Page up", "PageUp"),
-    ("Page down", "PageDown"),
-    ("Home", "Home"),
-    ("End", "End"),
-    ("Previous word", "Control+Left"),
-    ("Next word", "Control+Right"),
-    ("Step count", "step"),
-    ("Inverse movement", "undo"),
-    ("Toggle selection", "shift_onoff"),
-    ("Exit command mode", "exit"),
-    ("Date", "date"),
-    ("Time", "time"),
-    ("Enable", "enable"),
-    ("Disable", "disable"),
-    ("Switch window 1", "switch_win1"),
-    ("Switch window 2", "switch_win2"),
-    ("Delete", "Delete"),
-    ("Backspace", "Back"),
-    ("Caps Lock", "CapsLock"),
+const ACTIONS: &[(Message, &str)] = &[
+    (msg!("ui.output_shortcut", "Output shortcut"), ""),
+    (msg!("ui.move_left", "Move left"), "Left"),
+    (msg!("ui.move_right", "Move right"), "Right"),
+    (msg!("ui.move_up", "Move up"), "Up"),
+    (msg!("ui.move_down", "Move down"), "Down"),
+    (msg!("ui.page_up", "Page up"), "PageUp"),
+    (msg!("ui.page_down", "Page down"), "PageDown"),
+    (msg!("ui.home", "Home"), "Home"),
+    (msg!("ui.end", "End"), "End"),
+    (msg!("ui.previous_word", "Previous word"), "Control+Left"),
+    (msg!("ui.next_word", "Next word"), "Control+Right"),
+    (msg!("ui.step_count", "Step count"), "step"),
+    (msg!("command.inverse_movement", "Inverse movement"), "undo"),
+    (
+        msg!("command.toggle_selection", "Toggle selection"),
+        "shift_onoff",
+    ),
+    (
+        msg!("command.exit_command_mode", "Exit command mode"),
+        "exit",
+    ),
+    (msg!("ui.date", "Date"), "date"),
+    (msg!("ui.time", "Time"), "time"),
+    (msg!("ui.enable", "Enable"), "enable"),
+    (msg!("ui.disable", "Disable"), "disable"),
+    (msg!("ui.switch_window", "Switch window 1"), "switch_win1"),
+    (msg!("ui.switch_window_2", "Switch window 2"), "switch_win2"),
+    (msg!("ui.delete", "Delete"), "Delete"),
+    (msg!("ui.backspace", "Backspace"), "Back"),
+    (msg!("ui.caps_lock", "Caps Lock"), "CapsLock"),
 ];
 
 struct EditDialog {
@@ -1749,21 +1918,29 @@ fn stop_recording() {
     });
 }
 
-fn complete_recording() -> Result<(), String> {
+fn complete_recording() -> Result<(), Message> {
     let shared = SHARED.get().unwrap();
     let chord = {
         let state = shared.state.lock().unwrap();
-        let recorder = state.recorder.as_ref().ok_or("Recording has stopped")?;
+        let recorder = state
+            .recorder
+            .as_ref()
+            .ok_or_else(|| msg!("profile_ui.recording_has_stopped", "Recording has stopped"))?;
         if !recorder.released() {
-            return Err("Release all recorded keys first".into());
+            return Err(msg!(
+                "profile_ui.release_all_recorded_keys_first",
+                "Release all recorded keys first"
+            ));
         }
         if let Some(error) = &recorder.error {
             return Err(error.clone());
         }
-        recorder
-            .chord
-            .clone()
-            .ok_or("No valid shortcut was recorded")?
+        recorder.chord.clone().ok_or_else(|| {
+            msg!(
+                "profile_ui.no_valid_shortcut_was_recorded",
+                "No valid shortcut was recorded"
+            )
+        })?
     };
     let (target, parameter, action, status) = DIALOG.with(|cell| {
         let holder = cell.borrow();
@@ -1776,7 +1953,10 @@ fn complete_recording() -> Result<(), String> {
         )
     });
     if target == 0 {
-        return Err("No recording field is selected".into());
+        return Err(msg!(
+            "profile_ui.no_recording_field_is_selected",
+            "No recording field is selected"
+        ));
     }
     set_text(target, &chord);
     if target == parameter {
@@ -1788,12 +1968,15 @@ fn complete_recording() -> Result<(), String> {
     stop_recording();
     set_text(
         status,
-        "Shortcut recorded. Confirm to update the working copy.",
+        &msg!(
+            "ui.shortcut_recorded_confirm_to_update_the",
+            "Shortcut recorded. Confirm to update the working copy."
+        ),
     );
     Ok(())
 }
 
-fn dialog_action(id: usize) -> Result<(), String> {
+fn dialog_action(id: usize) -> Result<(), Message> {
     let snapshot = DIALOG.with(|cell| {
         cell.borrow().as_ref().map(|d| {
             (
@@ -1814,19 +1997,31 @@ fn dialog_action(id: usize) -> Result<(), String> {
         RECORD_INPUT | RECORD_OUTPUT => {
             if target != 0 {
                 stop_recording();
-                set_text(status, "Recording stopped; the field was not changed.");
+                set_text(
+                    status,
+                    &msg!(
+                        "ui.recording_stopped_the_field_was_not",
+                        "Recording stopped; the field was not changed."
+                    ),
+                );
                 return Ok(());
             }
             let shared = SHARED.get().unwrap();
             if shared.record_owner.load(Ordering::SeqCst) != 0 {
-                return Err("Stop the current recording first".into());
+                return Err(msg!(
+                    "profile_ui.stop_the_current_recording_first",
+                    "Stop the current recording first"
+                ));
             }
             if !sample_baseline(|code| {
                 (unsafe { GetAsyncKeyState(code as i32) }) as u16 & 0x8000 != 0
             })
             .is_empty()
             {
-                return Err("Release all keyboard keys before recording".into());
+                return Err(msg!(
+                    "profile_ui.release_all_keyboard_keys_before_recording",
+                    "Release all keyboard keys before recording"
+                ));
             }
             let target = shared.state.lock().unwrap().host.target;
             shared.lifecycle(target);
@@ -1839,7 +2034,10 @@ fn dialog_action(id: usize) -> Result<(), String> {
             });
             set_text(
                 status,
-                "Preparing recording: finishing output cleanup. Release all keys and wait for Recording.",
+                &msg!(
+                    "ui.preparing_recording_finishing_output_cleanup_release",
+                    "Preparing recording: finishing output cleanup. Release all keys and wait for Recording."
+                ),
             );
         }
         ENTRY_CANCEL => {
@@ -1848,7 +2046,10 @@ fn dialog_action(id: usize) -> Result<(), String> {
         }
         ENTRY_ACCEPT => {
             if target != 0 {
-                return Err("Finish or stop recording first".into());
+                return Err(msg!(
+                    "profile_ui.finish_or_stop_recording_first",
+                    "Finish or stop recording first"
+                ));
             }
             let scope = unsafe { SendMessageW(scope, CB_GETCURSEL, 0, 0) };
             let input_text = text(input);
@@ -1856,7 +2057,9 @@ fn dialog_action(id: usize) -> Result<(), String> {
             let value = if scope == 0 {
                 "mode".into()
             } else {
-                let (_, value) = ACTIONS.get(selected).ok_or("Choose an action")?;
+                let (_, value) = ACTIONS
+                    .get(selected)
+                    .ok_or_else(|| msg!("profile_ui.choose_an_action", "Choose an action"))?;
                 match *value {
                     "" => text(parameter),
                     "step" => format!("step{}", text(parameter)),
@@ -1891,7 +2094,7 @@ fn dialog_action(id: usize) -> Result<(), String> {
     Ok(())
 }
 
-fn prepare_recording() -> Result<(), String> {
+fn prepare_recording() -> Result<(), Message> {
     let pending = DIALOG.with(|cell| {
         cell.borrow()
             .as_ref()
@@ -1908,7 +2111,10 @@ fn prepare_recording() -> Result<(), String> {
         };
         if generation != shared.generation.load(Ordering::SeqCst) || failed {
             stop_recording();
-            return Err("Recording cancelled by a lifecycle change or cleanup failure".into());
+            return Err(msg!(
+                "profile_ui.recording_cancelled_by_a_lifecycle_change",
+                "Recording cancelled by a lifecycle change or cleanup failure"
+            ));
         }
         if ready
             && sample_baseline(|code| {
@@ -1927,7 +2133,10 @@ fn prepare_recording() -> Result<(), String> {
                     )
                 };
                 if temporary_hook == 0 {
-                    return Err(last_error("start shortcut recording"));
+                    return Err(last_error(&msg!(
+                        "windows.operation.start_shortcut_recording",
+                        "start shortcut recording"
+                    )));
                 }
                 RECORD_HOOK.with(|hook| hook.set(temporary_hook));
             }
@@ -1941,7 +2150,10 @@ fn prepare_recording() -> Result<(), String> {
             shared.record_owner.store(window as u64, Ordering::SeqCst);
             set_text(
                 status,
-                "Recording. Press and release a shortcut to fill the field, or click Stop recording to keep its current value.",
+                &msg!(
+                    "ui.recording_press_and_release_a_shortcut",
+                    "Recording. Press and release a shortcut to fill the field, or click Stop recording to keep its current value."
+                ),
             );
         }
     }
@@ -2024,13 +2236,21 @@ fn layout_dialog(window: HWND) {
         }
         let recording = dialog.target != 0;
         for (button, field, title) in [
-            (dialog.controls[2], dialog.input, "Record trigger"),
-            (dialog.controls[7], dialog.parameter, "Record output"),
+            (
+                dialog.controls[2],
+                dialog.input,
+                msg!("ui.record_trigger", "Record trigger"),
+            ),
+            (
+                dialog.controls[7],
+                dialog.parameter,
+                msg!("ui.record_output", "Record output"),
+            ),
         ] {
             set_text(
                 button,
-                if dialog.target == field {
-                    "Stop recording"
+                &if dialog.target == field {
+                    msg!("ui.stop_recording", "Stop recording")
                 } else {
                     title
                 },
@@ -2264,7 +2484,7 @@ unsafe extern "system" fn dialog_proc(window: HWND, message: u32, w: WPARAM, l: 
 fn edit_dialog(
     owner: HWND,
     old: Option<&Entry>,
-) -> Result<Option<(String, String, String, bool)>, String> {
+) -> Result<Option<(String, String, String, bool)>, Message> {
     static CLASS: std::sync::OnceLock<bool> = std::sync::OnceLock::new();
     let registered = CLASS.get_or_init(|| {
         let name = wide("TypingBindingEditor");
@@ -2279,7 +2499,10 @@ fn edit_dialog(
         unsafe { RegisterClassW(&class) != 0 }
     });
     if !registered {
-        return Err(last_error("register mapping editor"));
+        return Err(last_error(&msg!(
+            "windows.operation.register_mapping_editor",
+            "register mapping editor"
+        )));
     }
     let dpi = compatibility::window_dpi(owner);
     let text_unit = ((11 * 96 * text_scale() + 3600) / 7200) as i32 + 5;
@@ -2289,7 +2512,7 @@ fn edit_dialog(
         CreateWindowExW(
             WS_EX_CONTROLPARENT,
             wide("TypingBindingEditor").as_ptr(),
-            wide("Edit mapping").as_ptr(),
+            wide(&msg!("ui.edit_mapping", "Edit mapping")).as_ptr(),
             WS_OVERLAPPEDWINDOW | WS_VSCROLL,
             50,
             30,
@@ -2302,16 +2525,27 @@ fn edit_dialog(
         )
     };
     if window == 0 {
-        return Err(last_error("create mapping editor"));
+        return Err(last_error(&msg!(
+            "windows.operation.create_mapping_editor",
+            "create mapping editor"
+        )));
     }
     // Native accessibility associates a field with its preceding static label.
     // Creation order also defines keyboard navigation; vector order is layout.
-    let scope_label = child(window, "STATIC", "Type", 0, 0)?;
-    let scope = combo(window, 0, &["Mode key", "Command mode", "Hotkey"])?;
+    let scope_label = child(window, "STATIC", msg!("ui.type", "Type"), 0, 0)?;
+    let scope = combo(
+        window,
+        0,
+        &[
+            msg!("ui.mode_key", "Mode key"),
+            msg!("ui.command_mode", "Command mode"),
+            msg!("ui.hotkey", "Hotkey"),
+        ],
+    )?;
     let enabled = child(
         window,
         "BUTTON",
-        "Enabled",
+        msg!("lifecycle.enabled", "Enabled"),
         WS_TABSTOP | BS_AUTOCHECKBOX as u32,
         ENTRY_ENABLED,
     )?;
@@ -2327,7 +2561,7 @@ fn edit_dialog(
             0,
         );
     }
-    let input_label = child(window, "STATIC", "Trigger", 0, 0)?;
+    let input_label = child(window, "STATIC", msg!("ui.trigger", "Trigger"), 0, 0)?;
     let input = child(
         window,
         "EDIT",
@@ -2335,11 +2569,26 @@ fn edit_dialog(
         WS_TABSTOP | WS_BORDER | ES_AUTOHSCROLL as u32,
         0,
     )?;
-    let record_input = child(window, "BUTTON", "Record trigger", WS_TABSTOP, RECORD_INPUT)?;
-    let action_names = ACTIONS.iter().map(|(name, _)| *name).collect::<Vec<_>>();
-    let action_label = child(window, "STATIC", "Action", 0, 0)?;
+    let record_input = child(
+        window,
+        "BUTTON",
+        msg!("ui.record_trigger", "Record trigger"),
+        WS_TABSTOP,
+        RECORD_INPUT,
+    )?;
+    let action_names = ACTIONS
+        .iter()
+        .map(|(name, _)| name.clone())
+        .collect::<Vec<_>>();
+    let action_label = child(window, "STATIC", msg!("ui.action", "Action"), 0, 0)?;
     let action = combo(window, ACTION, &action_names)?;
-    let parameter_label = child(window, "STATIC", "Output / step", 0, 0)?;
+    let parameter_label = child(
+        window,
+        "STATIC",
+        msg!("ui.output_step", "Output / step"),
+        0,
+        0,
+    )?;
     let parameter = child(
         window,
         "EDIT",
@@ -2349,7 +2598,10 @@ fn edit_dialog(
     )?;
     let status = text_block(
         window,
-        "Trigger is a key or shortcut. Output shortcut and Step count use the parameter field. Inverse movement reverses recorded movement; it is not document undo.",
+        msg!(
+            "ui.trigger_is_a_key_or_shortcut",
+            "Trigger is a key or shortcut. Output shortcut and Step count use the parameter field. Inverse movement reverses recorded movement; it is not document undo."
+        ),
         0,
     )?;
     let mut controls = vec![
@@ -2364,12 +2616,15 @@ fn edit_dialog(
     controls.push(child(
         window,
         "BUTTON",
-        "Record output",
+        msg!("ui.record_output", "Record output"),
         WS_TABSTOP,
         RECORD_OUTPUT,
     )?);
     controls.push(status);
-    for (label, id) in [("Confirm", ENTRY_ACCEPT), ("Cancel", ENTRY_CANCEL)] {
+    for (label, id) in [
+        (msg!("ui.confirm", "Confirm"), ENTRY_ACCEPT),
+        (msg!("ui.cancel", "Cancel"), ENTRY_CANCEL),
+    ] {
         controls.push(child(window, "BUTTON", label, WS_TABSTOP, id)?);
     }
     controls.push(scope_label);
@@ -2407,7 +2662,10 @@ fn edit_dialog(
         unsafe {
             DestroyWindow(window);
         }
-        return Err(last_error("create mapping editor font"));
+        return Err(last_error(&msg!(
+            "windows.operation.create_mapping_editor_font",
+            "create mapping editor font"
+        )));
     }
     for &control in &controls {
         unsafe {

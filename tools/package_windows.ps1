@@ -14,6 +14,8 @@ $settings = @{
     CARGO_TARGET_DIR = $null
 }
 try {
+    & cargo test -p typing-host languages::tests::shipped_profiles_cover_actual_message_ids_and_keep_english_sources_aligned --locked --offline
+    if ($LASTEXITCODE -ne 0) { throw 'Language resource verification failed' }
     foreach ($name in $settings.Keys) {
         $savedEnvironment[$name] = [Environment]::GetEnvironmentVariable($name, 'Process')
         if ($null -eq $settings[$name]) { Remove-Item -LiteralPath "Env:$name" -ErrorAction SilentlyContinue }
@@ -92,6 +94,11 @@ try {
     New-Item -ItemType Directory -Path (Join-Path $package 'profiles') | Out-Null
     Copy-Item -LiteralPath resources/profiles/default.typing.ini -Destination (Join-Path $package 'profiles/default.typing.ini')
     Copy-Item -LiteralPath docs/USER_GUIDE.md -Destination (Join-Path $package 'USER_GUIDE.md')
+    New-Item -ItemType Directory -Path (Join-Path $package 'languages') | Out-Null
+    foreach ($languageFile in @('en.ini', 'zh-CN.ini', 'zh-CN.md')) {
+        Copy-Item -LiteralPath (Join-Path $projectRoot "resources/languages/$languageFile") -Destination (Join-Path $package "languages/$languageFile")
+    }
+    Copy-Item -LiteralPath docs/USER_GUIDE.md -Destination (Join-Path $package 'languages/en.md')
     # Preserve the source license documents' relative links in their own folder.
     $typingNotices = Join-Path $licenses 'Typing'
     $sharedNotices = Join-Path $typingNotices 'licenses'
@@ -107,7 +114,7 @@ try {
 Typing $version - portable Windows $Architecture build
 
 Extract this entire folder, then run Typing.exe. Keep inputsim.dll,
-configuration.ini, and the profiles folder together. No separate runtime or framework installation is
+configuration.ini, and the profiles and languages folders together. No separate runtime or framework installation is
 required by this build. Both binaries use the statically linked C runtime.
 Targets: $(if ($legacy) { 'Windows 7 SP1/10 x86 and Windows 11 via WOW64' } else { 'Windows 11 x64' }).
 Windows 11 x64 is the available verification platform. Clean-install deployment,
@@ -126,6 +133,10 @@ Mapping Profile, Event diagnostics, Settings, and Help use native controls, in t
 In Settings, check Start with Windows to launch Typing in the tray at sign-in for
 the current user. Uncheck it to cancel automatic startup. Changes apply immediately.
 After moving the portable folder, enable this option again from the new location.
+Choose System default, English, or 简体中文 in Settings to change language immediately.
+The language choice is per user in %LOCALAPPDATA%\Typing\language.txt. Language
+profiles and translated guides are in languages, separately from mapping profiles.
+After editing a language file, switch away and back or restart to reload it.
 See USER_GUIDE.md for setup, everyday use, profiles, and troubleshooting.
 
 Default configuration: Ctrl+U toggles Typing, Caps Lock or Left Alt alone toggles

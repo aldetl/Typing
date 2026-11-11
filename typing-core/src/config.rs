@@ -1,3 +1,4 @@
+use crate::{Message, msg};
 use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{Chord, Key, Modifiers};
@@ -6,6 +7,15 @@ use crate::{Chord, Key, Modifiers};
 pub enum BindingGroup {
     CommandMode,
     Always,
+}
+
+impl crate::MessageValue for BindingGroup {
+    fn message_value(&self) -> Message {
+        match self {
+            Self::CommandMode => msg!("binding.command_mode", "command mode"),
+            Self::Always => msg!("binding.both_modes", "both enabled modes"),
+        }
+    }
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -44,7 +54,7 @@ pub struct Config {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ConfigError {
     pub line: usize,
-    pub message: String,
+    pub message: Message,
 }
 
 struct Entry {
@@ -81,7 +91,7 @@ impl Config {
             let Some((key, value)) = line.split_once('=') else {
                 errors.push(ConfigError {
                     line: index + 1,
-                    message: "expected key=value".into(),
+                    message: msg!("profiles.expected_key_value", "expected key=value"),
                 });
                 continue;
             };
@@ -114,18 +124,24 @@ impl Config {
                     "mode_auto_exit" => match entry.value.as_str() {
                         "on" => config.auto_exit = true,
                         "off" => config.auto_exit = false,
-                        _ => errors.push(config_error(entry, "expected on or off")),
+                        _ => errors.push(config_error(
+                            entry,
+                            msg!("config.expected_on_or_off", "expected on or off"),
+                        )),
                     },
                     "mode_auto_exit_time" => match entry.value.parse() {
                         Ok(seconds) => config.auto_exit_seconds = seconds,
                         Err(_) => errors.push(config_error(
                             entry,
-                            "expected a signed integer number of seconds",
+                            msg!(
+                                "config.expected_a_signed_integer_number_of",
+                                "expected a signed integer number of seconds"
+                            ),
                         )),
                     },
                     "hotkey" => match entry.value.parse() {
                         Ok(chord) => config.global_hotkey = Some(chord),
-                        Err(error) => errors.push(config_error(entry, &format!("{error}"))),
+                        Err(error) => errors.push(config_error(entry, error.diagnostic())),
                     },
                     _ => {}
                 }
@@ -241,17 +257,22 @@ impl Config {
     }
 }
 
-pub fn validate_binding(input: &str, action: &str) -> Result<(Chord, Command), String> {
-    fn explicit_chord(text: &str) -> Result<(), String> {
+pub fn validate_binding(input: &str, action: &str) -> Result<(Chord, Command), Message> {
+    fn explicit_chord(text: &str) -> Result<(), Message> {
         let parts = text.split('+').collect::<Vec<_>>();
         if parts.iter().any(|part| part.is_empty()) {
-            return Err("A shortcut cannot contain an empty key name".into());
+            return Err(msg!(
+                "config.a_shortcut_cannot_contain_an_empty",
+                "A shortcut cannot contain an empty key name"
+            ));
         }
         for part in &parts[..parts.len().saturating_sub(1)] {
             if ["Control", "Alt", "Shift"].contains(part) {
                 continue;
             }
-            let key: Key = part.parse().map_err(|e| format!("{e}"))?;
+            let key: Key = part
+                .parse()
+                .map_err(|error: crate::KeyParseError| error.diagnostic())?;
             if ![
                 Key::CAPS_LOCK,
                 Key::LEFT_ALT,
@@ -263,7 +284,10 @@ pub fn validate_binding(input: &str, action: &str) -> Result<(Chord, Command), S
             ]
             .contains(&key)
             {
-                return Err("Only supported modifiers may precede the final key".into());
+                return Err(msg!(
+                    "config.only_supported_modifiers_may_precede_the",
+                    "Only supported modifiers may precede the final key"
+                ));
             }
         }
         Ok(())
@@ -297,35 +321,52 @@ impl Command {
         }
     }
 
-    pub fn label(&self) -> String {
+    pub fn label(&self) -> Message {
         match self {
-            Self::ModeKey => "Toggle command mode".into(),
-            Self::Undo => "Inverse movement".into(),
-            Self::ToggleSelection => "Toggle selection".into(),
-            Self::Exit => "Exit command mode".into(),
-            Self::Movement(chord) => format!("Move: {chord}"),
-            Self::Keys(chord) => format!("Output: {chord}"),
-            Self::Step(count) => format!("Step count: {count}"),
-            _ => self.configuration_value(),
+            Self::ModeKey => msg!("command.toggle_command_mode", "Toggle command mode"),
+            Self::Undo => msg!("command.inverse_movement", "Inverse movement"),
+            Self::ToggleSelection => msg!("command.toggle_selection", "Toggle selection"),
+            Self::Exit => msg!("command.exit_command_mode", "Exit command mode"),
+            Self::Movement(chord) => msg!("config.move", "Move: {chord}", chord = chord),
+            Self::Keys(chord) => msg!("config.output", "Output: {chord}", chord = chord),
+            Self::Step(count) => msg!("config.step_count", "Step count: {count}", count = count),
+            Self::Date => msg!("command.date", "Date"),
+            Self::Time => msg!("command.time", "Time"),
+            Self::Enable => msg!("command.enable", "Enable"),
+            Self::Disable => msg!("command.disable", "Disable"),
+            Self::SwitchWindow(number) => msg!(
+                "command.switch_window",
+                "Switch window {number}",
+                number = number
+            ),
         }
     }
 }
 
-fn config_error(entry: &Entry, message: &str) -> ConfigError {
+fn config_error(entry: &Entry, message: impl Into<Message>) -> ConfigError {
     ConfigError {
         line: entry.line,
         message: message.into(),
     }
 }
 
-fn parse_binding(entry: &Entry) -> Result<(Chord, Command), String> {
-    let input: Chord = entry.key.parse().map_err(|error| format!("{error}"))?;
+fn parse_binding(entry: &Entry) -> Result<(Chord, Command), Message> {
+    let input: Chord = entry
+        .key
+        .parse()
+        .map_err(|error: crate::KeyParseError| error.diagnostic())?;
     if input.key == Key::NONE {
-        return Err("a mapping trigger requires a final key".into());
+        return Err(msg!(
+            "config.a_mapping_trigger_requires_a_final",
+            "a mapping trigger requires a final key"
+        ));
     }
     let command = if entry.value == "mode" {
         if input.modifiers != Modifiers::default() {
-            return Err("mode requires one key".into());
+            return Err(msg!(
+                "config.mode_requires_one_key",
+                "mode requires one key"
+            ));
         }
         Command::ModeKey
     } else if let Some(chord) = movement_name(&entry.value) {
@@ -340,8 +381,11 @@ fn parse_binding(entry: &Entry) -> Result<(Chord, Command), String> {
     {
         Command::Step(step as u32)
     } else {
-        let output: Chord = entry.value.parse().map_err(|error| format!("{error}"))?;
-        output.output_keys().map_err(|error| error.to_string())?;
+        let output: Chord = entry
+            .value
+            .parse()
+            .map_err(|error: crate::KeyParseError| error.diagnostic())?;
+        output.output_keys().map_err(|error| error.diagnostic())?;
         if is_movement(output) {
             Command::Movement(output)
         } else {

@@ -2,8 +2,10 @@
 //! output, resources and synchronization; views consume observations.
 use std::{collections::VecDeque, time::Duration};
 use typing_core::{Config, Core, CoreError, Execution, KeyEvent, LocalDateTime, Request};
+use typing_core::{Message, msg};
 
 pub mod help;
+pub mod languages;
 pub mod profiles;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -173,19 +175,19 @@ impl Session {
         self.queue.push_back(Work::Diagnostic(action));
         true
     }
-    pub fn status(&self) -> &'static str {
+    pub fn status(&self) -> Message {
         if self.target == Lifecycle::Quit {
-            "Exiting"
+            msg!("lifecycle.exiting", "Exiting")
         } else if self.paused {
-            "Paused"
+            msg!("lifecycle.paused", "Paused")
         } else if self.failed {
-            "Failed"
+            msg!("lifecycle.failed", "Failed")
         } else if self.desired.is_some() || self.transitioning {
-            "Changing state"
+            msg!("lifecycle.changing_state", "Changing state")
         } else if self.admission {
-            "Enabled"
+            msg!("lifecycle.enabled", "Enabled")
         } else {
-            "Disabled"
+            msg!("lifecycle.disabled", "Disabled")
         }
     }
     pub fn icon_state(&self) -> usize {
@@ -208,26 +210,37 @@ pub struct Feedback {
     pub caps_color: [u8; 3],
 }
 impl Feedback {
-    pub fn from_config(config: &Config) -> Result<Self, String> {
-        let value = |name: &str, fallback: i32, low: i32, high: i32| -> Result<i32, String> {
+    pub fn from_config(config: &Config) -> Result<Self, Message> {
+        let value = |name: &str, fallback: i32, low: i32, high: i32| -> Result<i32, Message> {
             match config.common.get(name) {
                 None => Ok(fallback),
                 Some(text) => text
                     .parse::<i32>()
                     .ok()
                     .filter(|v| (low..=high).contains(v))
-                    .ok_or_else(|| format!("Invalid {name}: expected {low}..{high}")),
+                    .ok_or_else(|| {
+                        msg!(
+                            "lib.invalid_expected",
+                            "Invalid {name}: expected {low}..{high}",
+                            name = name,
+                            low = low,
+                            high = high
+                        )
+                    }),
             }
         };
-        let switch = |name: &str| -> Result<Option<bool>, String> {
+        let switch = |name: &str| -> Result<Option<bool>, Message> {
             config
                 .common
                 .get(name)
                 .map(|text| match text.as_str() {
                     "on" => Ok(true),
                     "off" => Ok(false),
-                    _ => Err(format!(
-                        "Invalid {name}: expected on or off, found {text:?}"
+                    _ => Err(msg!(
+                        "lib.invalid_expected_on_or_off_found",
+                        "Invalid {name}: expected on or off, found {text}",
+                        name = name,
+                        text = format!("{value:?}", value = text)
                     )),
                 })
                 .transpose()
@@ -297,14 +310,14 @@ impl WindowSize {
 
 #[derive(Clone, Debug)]
 pub struct BindingRow {
-    pub group: &'static str,
+    pub group: Message,
     pub input: String,
     pub action: String,
 }
 
 /// Presentation of configured names only. Interpretation/validation is exclusively Config's job.
 pub fn binding_rows(text: &str) -> Vec<BindingRow> {
-    let mut group = "";
+    let mut group = Message::default();
     let mut rows: Vec<BindingRow> = Vec::new();
     for line in text.trim_start_matches('\u{feff}').lines().map(str::trim) {
         if line.starts_with(';') {
@@ -312,9 +325,9 @@ pub fn binding_rows(text: &str) -> Vec<BindingRow> {
         }
         if line.starts_with('[') && line.ends_with(']') {
             group = match line {
-                "[modekeys]" => "Command mode",
-                "[hotkeys]" => "Both enabled modes",
-                _ => "",
+                "[modekeys]" => msg!("ui.command_mode", "Command mode"),
+                "[hotkeys]" => msg!("binding.both_enabled_modes", "Both enabled modes"),
+                _ => Message::default(),
             };
         } else if !group.is_empty()
             && let Some((input, action)) = line.split_once('=')
@@ -326,7 +339,7 @@ pub fn binding_rows(text: &str) -> Vec<BindingRow> {
                 row.action = action.trim().into();
             } else {
                 rows.push(BindingRow {
-                    group,
+                    group: group.clone(),
                     input: input.trim().into(),
                     action: action.trim().into(),
                 });

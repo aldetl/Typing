@@ -1,5 +1,6 @@
 //! Optional APIs are resolved at runtime so the x86 image can load on Windows 7.
 use super::*;
+use typing_core::{Message, msg};
 use windows_sys::Win32::{Graphics::Gdi::*, System::SystemInformation::*, UI::HiDpi::*};
 
 fn user32(name: &'static [u8]) -> Option<unsafe extern "system" fn() -> isize> {
@@ -54,7 +55,7 @@ pub struct PowerNotification {
     unregister: unsafe extern "system" fn(isize) -> BOOL,
 }
 impl PowerNotification {
-    pub fn register(window: HWND) -> Result<Option<Self>, String> {
+    pub fn register(window: HWND) -> Result<Option<Self>, Message> {
         match (
             user32(b"RegisterSuspendResumeNotification\0"),
             user32(b"UnregisterSuspendResumeNotification\0"),
@@ -64,9 +65,10 @@ impl PowerNotification {
                     std::mem::transmute(register);
                 let handle = register(window, DEVICE_NOTIFY_WINDOW_HANDLE);
                 if handle == 0 {
-                    return Err(format!(
-                        "register sleep/wake notifications: {}",
-                        std::io::Error::last_os_error()
+                    return Err(msg!(
+                        "compatibility.register_sleep_wake_notifications",
+                        "register sleep/wake notifications: {arg0}",
+                        arg0 = std::io::Error::last_os_error()
                     ));
                 }
                 Ok(Some(Self {
@@ -83,10 +85,10 @@ impl PowerNotification {
                 if unsafe { GetVersionExW(&mut version) } == 0
                     || (version.dwMajorVersion, version.dwMinorVersion) >= (6, 2)
                 {
-                    Err(
+                    Err(msg!(
+                        "compatibility.sleep_wake_registration_apis_are_unavailable",
                         "Sleep/wake registration APIs are unavailable on this Windows version."
-                            .into(),
-                    )
+                    ))
                 } else {
                     Ok(None)
                 } // Windows 7 sends legacy WM_POWERBROADCAST notifications.
