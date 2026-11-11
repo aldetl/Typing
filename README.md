@@ -10,6 +10,14 @@ With the default profile, tap and release **Caps Lock** or **Left Alt** alone to
 
 *Default command-mode movement keys.* Home and End follow the application's cursor behavior.
 
+### Command mode
+
+In Vim-style command mode, a single letter performs a movement. **I**, **J**, **K**, and **L** move up, left, down, and right. **H** and **P** move one word left or right, while **U** and **O** send Home and End.
+
+### Direct shortcuts
+
+Emacs-style shortcuts combine a modifier with a letter, so movement works without entering command mode. For example, **Caps Lock** + **J** moves left.
+
 ## Features
 
 - Keyboard navigation, text selection, editing shortcuts, movement counts, and date/time insertion.
