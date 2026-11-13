@@ -45,7 +45,7 @@ try {
         'shell32.dll', 'comctl32.dll', 'ole32.dll', 'oleaut32.dll', 'bcrypt.dll',
         'ws2_32.dll', 'userenv.dll', 'wtsapi32.dll', 'uxtheme.dll', 'dwmapi.dll', 'imm32.dll',
         'msimg32.dll', 'comdlg32.dll', 'version.dll', 'propsys.dll', 'setupapi.dll', 'cfgmgr32.dll',
-        'dwrite.dll', 'shlwapi.dll', 'secur32.dll', 'crypt32.dll', 'normaliz.dll')
+        'dwrite.dll', 'shlwapi.dll', 'secur32.dll', 'crypt32.dll', 'normaliz.dll', 'gdiplus.dll')
     $dependencies = @{}
     foreach ($binary in @($application, $inputSim)) {
         $headers = & $dumpbin /headers $binary
@@ -99,6 +99,11 @@ try {
         Copy-Item -LiteralPath (Join-Path $projectRoot "resources/languages/$languageFile") -Destination (Join-Path $package "languages/$languageFile")
     }
     Copy-Item -LiteralPath docs/USER_GUIDE.md -Destination (Join-Path $package 'languages/en.md')
+    foreach ($guideAssetDirectory in @('assets', 'languages/assets')) {
+        $guideAssets = Join-Path $package $guideAssetDirectory
+        New-Item -ItemType Directory -Path $guideAssets | Out-Null
+        Copy-Item -LiteralPath docs/assets/command-mode-movement.png -Destination (Join-Path $guideAssets 'command-mode-movement.png')
+    }
     # Preserve the source license documents' relative links in their own folder.
     $typingNotices = Join-Path $licenses 'Typing'
     $sharedNotices = Join-Path $typingNotices 'licenses'
@@ -169,7 +174,8 @@ table that fills the available space.
 This build contains Rust shared host logic, native Win32 controls, and InputSim.
 There is no Slint, webview, managed runtime, installer, or updater. The app and
 enabled tray use the square-eye pixel mole; disabled uses the narrow-eye mole.
-The distinct command-mode icon and default mappings retain Aldetl's resources.
+Command mode uses the same enabled mole lowered slightly, preserving its stepped
+bottom edge and thin slate-gray outline. Default mappings retain Aldetl's resources.
 Help shows a short introduction and examples, followed by Open User Guide… and
 About. The full formatted guide opens in a separate resizable, read-only dialog.
 Typing's software license, icon reuse terms, and project NOTICE are in

@@ -733,6 +733,9 @@ fn locale_designator(kind: u32) -> String {
 fn sample_baseline(is_down: impl Fn(u16) -> bool) -> BTreeSet<Key> {
     (1..=254)
         .filter(|code| !matches!(code, 1 | 2 | 4 | 5 | 6))
+        // Aggregate modifier states duplicate the left/right identities used
+        // by normalize_native; no normalized release could clear an aggregate.
+        .filter(|code| !matches!(*code, VK_SHIFT | VK_CONTROL | VK_MENU))
         .filter(|code| is_down(*code))
         .filter_map(Key::from_code)
         .collect()
@@ -1068,15 +1071,7 @@ unsafe extern "system" fn main_window(window: HWND, message: u32, w: WPARAM, l: 
     }
     match message {
         value if value == WM_APP + 40 => {
-            unsafe {
-                MessageBoxW(
-                    window,
-                    wide(&msg!("main.typing_fast_vim_and_emacs_cursor", "Typing {arg0}\r\nFast vim and emacs cursor moving and convenient key mapping\r\n\r\nGitHub: https://github.com/aldetl/Typing\r\nWebsite: https://xdetail.org/typing", arg0 = env!("CARGO_PKG_VERSION")))
-                    .as_ptr(),
-                    wide(&msg!("ui.about_typing", "About Typing")).as_ptr(),
-                    MB_OK | MB_ICONINFORMATION,
-                );
-            }
+            ui::show_about(window);
             0
         }
         WM_COMMAND => {
@@ -1537,5 +1532,70 @@ mod host_tests {
             baseline,
             [Key::from_code(65).unwrap(), Key::LEFT_CONTROL].into()
         );
+    }
+
+    #[test]
+    fn sampled_modifiers_clear_on_normalized_release_and_restore_mode_taps() {
+        // Include individual sides and combinations, including both sides of
+        // each modifier. Windows reports aggregate and side-specific states.
+        for held_mask in 0u8..64 {
+            let sides = [
+                (VK_SHIFT, VK_LSHIFT),
+                (VK_SHIFT, VK_RSHIFT),
+                (VK_CONTROL, VK_LCONTROL),
+                (VK_CONTROL, VK_RCONTROL),
+                (VK_MENU, VK_LMENU),
+                (VK_MENU, VK_RMENU),
+            ];
+            let held: Vec<_> = sides
+                .into_iter()
+                .enumerate()
+                .filter_map(|(index, pair)| (held_mask & (1 << index) != 0).then_some(pair))
+                .collect();
+            let baseline = sample_baseline(|code| {
+                held.iter()
+                    .any(|(aggregate, side)| code == *aggregate || code == *side)
+            });
+            let mut core = typing_core::Core::new(
+                Config::parse("[modekeys]\nCapsLock=mode\nLMenu=mode\n").unwrap(),
+            );
+            core.restart(baseline).unwrap();
+            assert!(!core.command_mode());
+            let input = |core: &mut typing_core::Core, key, direction| {
+                core.input(KeyEvent { key, direction }, Duration::ZERO)
+                    .consume
+            };
+            for (aggregate, side) in &held {
+                // A genuinely held baseline key must still prevent isolation.
+                assert!(input(&mut core, Key::CAPS_LOCK, Direction::Down));
+                input(&mut core, Key::CAPS_LOCK, Direction::Up);
+                assert!(!core.command_mode());
+                let release = KBDLLHOOKSTRUCT {
+                    vkCode: u32::from(*aggregate),
+                    scanCode: if *side == VK_RSHIFT { 0x36 } else { 0 },
+                    flags: LLKHF_UP
+                        | if matches!(*side, VK_RCONTROL | VK_RMENU) {
+                            LLKHF_EXTENDED
+                        } else {
+                            0
+                        },
+                    time: 0,
+                    dwExtraInfo: 0,
+                };
+                let key = normalize_native(&release).unwrap();
+                assert_eq!(key.code(), *side);
+                input(&mut core, key, Direction::Up);
+            }
+            for mode in [Key::CAPS_LOCK, Key::LEFT_ALT] {
+                for enabled in [true, false] {
+                    assert!(
+                        input(&mut core, mode, Direction::Down),
+                        "mode down must be consumed after baseline releases: mask={held_mask}"
+                    );
+                    input(&mut core, mode, Direction::Up);
+                    assert_eq!(core.command_mode(), enabled, "mask={held_mask}");
+                }
+            }
+        }
     }
 }

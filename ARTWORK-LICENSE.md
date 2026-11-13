@@ -13,6 +13,7 @@ These permissions cover the following files and copies, resizings, format conver
 - `typing-windows/res/mole-main-source.png`
 - `typing-windows/res/mole-tray-disabled-source.png`
 - `typing-windows/res/mole-tray-enabled-source.png`
+- `typing-windows/res/mole-tray-command-source.png`
 
 ## Permissions
 

@@ -6,13 +6,15 @@ Typing is an efficient tool that keeps your hands on the keyboard. It greatly re
 
 With the default profile, tap and release **Caps Lock** or **Left Alt** alone to enter command mode, then use the keys below. Tap a mode key again or press **G** to resume typing.
 
-![Default command-mode movement keys: U sends Home, I moves up, O sends End, P moves one word right; H moves one word left, J moves left, K moves down, and L moves right.](docs/assets/command-mode-movement.svg)
+<img src="docs/assets/command-mode-movement.png" width="570" alt="Default command-mode movement keys: U sends Home, I moves up, O sends End, P moves one word right; H moves one word left, J moves left, K moves down, and L moves right; N sends Page Up and M sends Page Down.">
 
 *Default command-mode movement keys.* Home and End follow the application's cursor behavior.
 
 ### Command mode
 
 In Vim-style command mode, a single letter performs a movement. **I**, **J**, **K**, and **L** move up, left, down, and right. **H** and **P** move one word left or right, while **U** and **O** send Home and End.
+
+With the default profile, hold **Caps Lock** and press **Space** to toggle capitalization while Caps Lock is used as a mode key.
 
 ### Direct shortcuts
 

@@ -423,6 +423,141 @@ static int recovery_cases(void) {
     return 1;
 }
 
+static int mode_taps_after_release(void) {
+    unsigned left = count(delivered, delivered_count, VK_LEFT, 0, client_tag);
+    unsigned caps = count(delivered, delivered_count, VK_CAPITAL, 0, 0);
+    unsigned ordinary = count(delivered, delivered_count, 'J', 0, 0);
+    int caps_state = GetKeyState(VK_CAPITAL) & 1;
+    CHECK(tap('J'));
+    CHECK(count(delivered, delivered_count, 'J', 0, 0) == ordinary + 1);
+    CHECK(count(delivered, delivered_count, VK_LEFT, 0, client_tag) == left);
+    CHECK(tap(VK_CAPITAL));
+    CHECK(tap('J'));
+    CHECK(wait_output(VK_LEFT, left + 1, left + 1));
+    CHECK(count(delivered, delivered_count, VK_CAPITAL, 0, 0) == caps);
+    CHECK((GetKeyState(VK_CAPITAL) & 1) == caps_state);
+    CHECK(tap(VK_CAPITAL));
+    CHECK(tap('J'));
+    CHECK(count(delivered, delivered_count, 'J', 0, 0) == ordinary + 2);
+    CHECK(tap(VK_LMENU));
+    CHECK(tap('J'));
+    CHECK(wait_output(VK_LEFT, left + 2, left + 2));
+    CHECK(tap(VK_LMENU));
+    CHECK((GetKeyState(VK_CAPITAL) & 1) == caps_state);
+    return 1;
+}
+
+static int caps_lock_policy_cases(void) {
+    const UINT other_keys[] = {VK_LCONTROL, VK_RCONTROL, VK_LSHIFT, VK_RSHIFT,
+                              VK_LMENU, VK_RMENU, 'B', VK_SPACE};
+    unsigned mode, order, index;
+    for (mode = 0; mode < 2; mode++) {
+        for (order = 0; order < 2; order++) {
+            for (index = 0; index < ARRAYSIZE(other_keys); index++) {
+                UINT other = other_keys[index];
+                unsigned caps, generated, left, ordinary;
+                int caps_state;
+                if (order == 1 && other == VK_SPACE) continue; /* explicit action below */
+                CHECK(reset_client());
+                if (mode) CHECK(tap(VK_CAPITAL));
+                caps = count(delivered, delivered_count, VK_CAPITAL, 0, 0);
+                generated = count(delivered, delivered_count, VK_CAPITAL, 0, client_tag);
+                caps_state = GetKeyState(VK_CAPITAL) & 1;
+                if (order == 0) CHECK(send_key(other, 0));
+                CHECK(send_key(VK_CAPITAL, 0));
+                if (order == 1) CHECK(send_key(other, 0));
+                CHECK(send_key(VK_CAPITAL, 0)); /* repeat while non-isolated */
+                CHECK(send_key(other, 1));
+                CHECK(send_key(VK_CAPITAL, 1));
+                pump(30);
+                CHECK(count(delivered, delivered_count, VK_CAPITAL, 0, 0) == caps);
+                CHECK(count(delivered, delivered_count, VK_CAPITAL, 0, client_tag) == generated);
+                CHECK((GetKeyState(VK_CAPITAL) & 1) == caps_state);
+                left = count(delivered, delivered_count, VK_LEFT, 0, client_tag);
+                ordinary = count(delivered, delivered_count, 'J', 0, 0);
+                CHECK(tap('J'));
+                if (mode) {
+                    CHECK(wait_output(VK_LEFT, left + 1, left + 1));
+                    CHECK(count(delivered, delivered_count, 'J', 0, 0) == ordinary);
+                } else {
+                    CHECK(count(delivered, delivered_count, 'J', 0, 0) == ordinary + 1);
+                    CHECK(count(delivered, delivered_count, VK_LEFT, 0, client_tag) == left);
+                }
+            }
+        }
+        CHECK(reset_client());
+        if (mode) CHECK(tap(VK_CAPITAL));
+        {
+            int caps_state = GetKeyState(VK_CAPITAL) & 1;
+            unsigned left = count(delivered, delivered_count, VK_LEFT, 0, client_tag);
+            unsigned ordinary = count(delivered, delivered_count, 'J', 0, 0);
+            CHECK(toggle_caps_output());
+            CHECK((GetKeyState(VK_CAPITAL) & 1) != caps_state);
+            CHECK(tap('J'));
+            if (mode) CHECK(wait_output(VK_LEFT, left + 1, left + 1));
+            else CHECK(count(delivered, delivered_count, 'J', 0, 0) == ordinary + 1);
+            CHECK(toggle_caps_output());
+            CHECK((GetKeyState(VK_CAPITAL) & 1) == caps_state);
+        }
+    }
+    CHECK(reset_client());
+    puts("PASS Caps Lock overlaps and repeats are suppressed in both orders and modes; only Caps+Space toggles capitalization without changing mode");
+    return 1;
+}
+
+static int held_modifier_cases(void) {
+    const UINT modifiers[] = {VK_LCONTROL, VK_RCONTROL, VK_LSHIFT, VK_RSHIFT, VK_LMENU, VK_RMENU};
+    unsigned transition, index;
+    for (transition = 0; transition < 3; transition++) {
+        for (index = 0; index < ARRAYSIZE(modifiers); index++) {
+            UINT key = modifiers[index];
+            if (transition == 0) {
+                PostMessageW(client, WM_COMMAND, CLIENT_DISABLE, 0);
+                CHECK(wait_status(L"Disabled"));
+            }
+            /* Keep Left Alt visible to Windows before restarting an enabled
+               session: an isolated mode-key down would be suppressed. */
+            if (transition != 0) CHECK(send_key('B', 0));
+            CHECK(send_key(key, 0));
+            if (transition != 0) CHECK(send_key('B', 1));
+            pump(20);
+            CHECK(GetAsyncKeyState((int)key) & 0x8000);
+            SetWindowTextW(client, L"Typing - Held modifier transition requested");
+            if (transition == 2) {
+                PostMessageW(client, WM_POWERBROADCAST, PBT_APMRESUMEAUTOMATIC, 0);
+            } else {
+                PostMessageW(client, WM_COMMAND, CLIENT_ENABLE, 0);
+            }
+            CHECK(wait_status(L"Enabled"));
+            /* Keep the modifier held through completion so baseline sampling
+               cannot accidentally run after its release. */
+            CHECK(GetAsyncKeyState((int)key) & 0x8000);
+            CHECK(send_key(key, 1));
+            pump(20);
+            CHECK(!(GetAsyncKeyState((int)key) & 0x8000));
+            CHECK(mode_taps_after_release());
+            printf("PASS held modifier %u through %s: release restores Caps Lock/Left Alt mode taps and native command output\n",
+                key, transition == 0 ? "Enable" : transition == 1 ? "enabled restart" : "recovery");
+        }
+    }
+    /* Exercise the configured global Enable path with both modifiers still
+       held, rather than releasing them before asynchronous activation. */
+    PostMessageW(client, WM_COMMAND, CLIENT_DISABLE, 0);
+    CHECK(wait_status(L"Disabled"));
+    CHECK(send_key(VK_LCONTROL, 0));
+    CHECK(send_key(VK_LSHIFT, 0));
+    CHECK(tap(VK_F12));
+    CHECK(wait_status(L"Enabled"));
+    CHECK(GetAsyncKeyState(VK_LCONTROL) & 0x8000);
+    CHECK(GetAsyncKeyState(VK_LSHIFT) & 0x8000);
+    CHECK(send_key(VK_LSHIFT, 1));
+    CHECK(send_key(VK_LCONTROL, 1));
+    pump(20);
+    CHECK(mode_taps_after_release());
+    puts("PASS global Ctrl+Shift+F12 Enable while modifiers remain held; mode taps work after release");
+    return 1;
+}
+
 /* Hold this disposable client's UI thread between Enable and its completion
    notification. Capture/output must not depend on timely tray presentation. */
 static int hotkey_transition_case(void) {
@@ -570,11 +705,13 @@ static int run(const wchar_t *host, const wchar_t *dll, const wchar_t *config,
     if (!wait_status(L"Enabled")) { DWORD exit_code = 0; GetExitCodeProcess(client_process, &exit_code); fprintf(stderr, "Client exit/status code 0x%08lx\n", exit_code); goto cleanup; }
     if (IsWindowVisible(client)) { fprintf(stderr, "FAIL client startup must remain hidden\n"); goto cleanup; }
     if (!focus_receiver(L"after client startup")) goto cleanup;
-    if (wcscmp(phase, L"hotkey-transition") == 0) ok = hotkey_transition_case();
+    if (wcscmp(phase, L"caps-policy") == 0) ok = caps_lock_policy_cases();
+    else if (wcscmp(phase, L"held-modifiers") == 0) ok = held_modifier_cases();
+    else if (wcscmp(phase, L"hotkey-transition") == 0) ok = hotkey_transition_case();
     else if (wcscmp(phase, L"quit") == 0) ok = cleanup_case(CLIENT_QUIT, 0);
     else if (wcscmp(phase, L"failure-disable") == 0) ok = cleanup_case(CLIENT_DISABLE, 1);
     else if (wcscmp(phase, L"failure-quit") == 0) ok = cleanup_case(CLIENT_QUIT, 1);
-    else ok = normal_cases() && recovery_cases() && cleanup_case(CLIENT_DISABLE, 0);
+    else ok = normal_cases() && recovery_cases() && held_modifier_cases() && caps_lock_policy_cases() && cleanup_case(CLIENT_DISABLE, 0);
 cleanup:
     if (WaitForSingleObject(client_process, 0) == WAIT_TIMEOUT) {
         PostMessageW(client, WM_COMMAND, CLIENT_QUIT, 0);

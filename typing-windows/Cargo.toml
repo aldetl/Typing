@@ -1,6 +1,6 @@
 [package]
 name = "typing-windows"
-version = "1.5.0"
+version = "1.5.1"
 edition = "2024"
 publish = false
 license-file = "../LICENSE"
@@ -16,8 +16,11 @@ windows-sys = { version = "0.52", features = [
     "Win32_Foundation",
     "Win32_Globalization",
     "Win32_Graphics_Gdi",
+    "Win32_Graphics_GdiPlus",
     "Win32_Security",
     "Win32_System_LibraryLoader",
+    "Win32_System_Com",
+    "Win32_System_SystemServices",
     "Win32_System_Power",
     "Win32_System_SystemInformation",
     "Win32_System_Threading",

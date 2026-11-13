@@ -171,6 +171,98 @@ fn another_held_key_prevents_an_isolated_mode_tap() {
 }
 
 #[test]
+fn mode_key_caps_lock_suppresses_unmatched_overlaps_and_stale_keys() {
+    let default = include_str!("../../resources/profiles/default.typing.ini");
+    for initially_on in [false, true] {
+        for held in [
+            "LControlKey",
+            "RControlKey",
+            "LShiftKey",
+            "RShiftKey",
+            "LMenu",
+            "RMenu",
+            "B",
+            "Space",
+        ] {
+            let mut host = Host::new(default);
+            if initially_on {
+                host.tap("CapsLock");
+            }
+            host.event(held, Direction::Down);
+            for _ in 0..2 {
+                assert!(host.event("CapsLock", Direction::Down), "held={held}");
+            }
+            host.event("CapsLock", Direction::Up);
+            assert_eq!(host.core.command_mode(), initially_on);
+            // Omit the held key's release to exercise the same suppression
+            // when the observation is stale rather than physically held.
+            assert!(host.event("CapsLock", Direction::Down));
+            host.event("CapsLock", Direction::Up);
+            assert_eq!(host.core.command_mode(), initially_on);
+            assert!(host.queue.is_empty());
+            host.event(held, Direction::Up);
+            host.tap("CapsLock");
+            assert_eq!(host.core.command_mode(), !initially_on);
+
+            if held != "Space" {
+                let mut host = Host::new(default);
+                if initially_on {
+                    host.tap("CapsLock");
+                }
+                assert!(host.event("CapsLock", Direction::Down));
+                host.event(held, Direction::Down);
+                assert!(host.event("CapsLock", Direction::Down));
+                host.event(held, Direction::Up);
+                host.event("CapsLock", Direction::Up);
+                assert_eq!(host.core.command_mode(), initially_on);
+                assert!(host.queue.is_empty());
+            }
+        }
+    }
+}
+
+#[test]
+fn caps_space_output_toggles_caps_without_changing_command_mode() {
+    for action in ["CapsLock", "capslock"] {
+        for initially_on in [false, true] {
+            let mut host = Host::new(&format!(
+                "[modekeys]\nCapsLock=mode\n[hotkeys]\nCapsLock+Space={action}\n"
+            ));
+            if initially_on {
+                host.tap("CapsLock");
+            }
+            assert!(host.event("CapsLock", Direction::Down));
+            assert!(host.event("Space", Direction::Down));
+            host.event("Space", Direction::Up);
+            host.event("CapsLock", Direction::Up);
+            assert_eq!(host.core.command_mode(), initially_on);
+            assert_eq!(host.run(), expected_keys(&["CapsLock"], 1));
+            assert_eq!(host.core.command_mode(), initially_on);
+            assert!(host.queue.is_empty());
+        }
+    }
+}
+
+#[test]
+fn caps_suppression_respects_mode_configuration_pause_and_explicit_bindings() {
+    let mut ordinary = Host::new("[modekeys]\nEscape=mode\n");
+    assert!(!ordinary.event("CapsLock", Direction::Down));
+    ordinary.event("CapsLock", Direction::Up);
+    ordinary.event("LControlKey", Direction::Down);
+    assert!(!ordinary.event("CapsLock", Direction::Down));
+    let mut paused = Host::new(CONFIG);
+    paused.core.pause();
+    assert!(!paused.event("CapsLock", Direction::Down));
+    let mut custom = Host::new("[modekeys]\nCapsLock=mode\n[hotkeys]\nLControlKey+CapsLock=Left\n");
+    custom.event("LControlKey", Direction::Down);
+    assert!(custom.event("CapsLock", Direction::Down));
+    custom.event("CapsLock", Direction::Up);
+    custom.event("LControlKey", Direction::Up);
+    assert!(!custom.core.command_mode());
+    assert_eq!(custom.run(), expected_keys(&["Left"], 1));
+}
+
+#[test]
 fn movement_pair_counts_history_and_selection_match_aldetl() {
     let mut host = Host::new(CONFIG);
     host.tap("CapsLock");
