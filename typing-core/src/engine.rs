@@ -191,6 +191,9 @@ impl Core {
             Direction::Down => {
                 self.held.insert(event.key);
                 self.isolated_mode_key = false;
+                // Mode-key Caps Lock must never leak a capitalization toggle
+                // when another key prevents an isolated mode gesture.
+                decision.consume = is_mode_key && event.key == Key::CAPS_LOCK;
                 if is_mode_key && self.held.len() == 1 {
                     self.isolated_mode_key = true;
                     decision.consume = true;

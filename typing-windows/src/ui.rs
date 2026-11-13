@@ -8,8 +8,13 @@ use windows_sys::Win32::{
     UI::{Accessibility::*, Controls::*},
 };
 
+#[path = "about_ui.rs"]
+mod about;
 #[path = "guide_ui.rs"]
 mod guide;
+pub use about::show as show_about;
+#[path = "movement_picture.rs"]
+mod movement_picture;
 #[path = "profile_ui.rs"]
 mod profiles;
 pub use profiles::{confirm_exit, profile_status, show_profile_recovery};
@@ -155,6 +160,8 @@ fn tab_titles() -> [Message; 4] {
 const GUIDE: usize = 2011;
 const OPEN_GUIDE: usize = 2012;
 const INTRODUCTION: usize = 2013;
+const MOVEMENT_LABEL: usize = 2023;
+const MOVEMENT_PICTURE: usize = 2024;
 const CLEAR_EVENTS: usize = 2018;
 const START_WITH_WINDOWS: usize = 2019;
 const WM_LAYOUT_CONTENT: u32 = WM_APP + 84;
@@ -544,12 +551,22 @@ pub fn initialize(
         });
     }
     let help_page = pages[HELP_PAGE].window;
-    let introduction = text_block(
+    let movement_label = text_block(
         help_page,
-        typing_host::help::introduction_message(),
-        INTRODUCTION,
+        msg!(
+            "ui.default_cursor_movement",
+            "Default cursor movement key mapping"
+        ),
+        MOVEMENT_LABEL,
     )?;
-    pages[HELP_PAGE].controls.push(introduction);
+    let movement_picture = movement_picture::create(help_page, MOVEMENT_PICTURE)?;
+    let about = child(
+        help_page,
+        "BUTTON",
+        msg!("ui.about", "About"),
+        WS_TABSTOP | BS_PUSHBUTTON as u32,
+        ABOUT,
+    )?;
     let open_guide = child(
         pages[HELP_PAGE].window,
         "BUTTON",
@@ -557,15 +574,18 @@ pub fn initialize(
         WS_TABSTOP | BS_PUSHBUTTON as u32,
         OPEN_GUIDE,
     )?;
-    pages[HELP_PAGE].controls.push(open_guide);
-    let about = child(
-        pages[HELP_PAGE].window,
-        "BUTTON",
-        msg!("ui.about", "About"),
-        WS_TABSTOP | BS_PUSHBUTTON as u32,
-        ABOUT,
+    let introduction = text_block(
+        help_page,
+        typing_host::help::introduction_message(),
+        INTRODUCTION,
     )?;
-    pages[HELP_PAGE].controls.push(about);
+    pages[HELP_PAGE].controls.extend([
+        introduction,
+        movement_label,
+        movement_picture,
+        open_guide,
+        about,
+    ]);
     let keyboard_events = child(
         pages[EVENTS_PAGE].window,
         "BUTTON",
@@ -1224,30 +1244,45 @@ impl Desktop {
         let mut y = gap;
         if index == HELP_PAGE {
             let introduction = page.controls[0];
+            let label = page.controls[1];
+            let picture_width = width.min(scale(285, self.dpi) * self.text_scale as i32 / 100);
+            let label_height = text_block_height(label, picture_width);
+            positions.push((label, gap, y, picture_width, label_height));
+            y += label_height + gap;
+            let picture_height = movement_picture::height(picture_width);
+            positions.push((page.controls[2], gap, y, picture_width, picture_height));
+            let button_width = page.controls[3..]
+                .iter()
+                .map(|&window| profiles::control_width(window, gap * 2, unit * 3))
+                .max()
+                .unwrap_or(1)
+                .min(width);
+            let button_height = 2 * control_height + gap;
+            let beside_picture = picture_width + gap + button_width <= width;
+            let button_y = if beside_picture {
+                y
+            } else {
+                y + picture_height + gap
+            };
+            let button_x = gap + width - button_width;
+            positions.push((
+                page.controls[4],
+                button_x,
+                button_y,
+                button_width,
+                control_height,
+            ));
+            positions.push((
+                page.controls[3],
+                button_x,
+                button_y + control_height + gap,
+                button_width,
+                control_height,
+            ));
+            y = (y + picture_height).max(button_y + button_height) + gap;
             let height = text_block_height(introduction, width);
             positions.push((introduction, gap, y, width, height));
             y += height + gap;
-            let mut buttons = Vec::new();
-            let mut x = gap;
-            let mut button_y = 0;
-            for &window in &page.controls[1..] {
-                let button_width = profiles::control_width(window, gap * 2, unit * 3).min(width);
-                if x > gap && x + button_width > rect.right - gap {
-                    x = gap;
-                    button_y += control_height + gap;
-                }
-                buttons.push((window, x, button_y, button_width, control_height));
-                x += button_width + gap;
-            }
-            let button_height = button_y + control_height;
-            positions.extend(
-                buttons
-                    .into_iter()
-                    .map(|(window, x, offset, width, height)| {
-                        (window, x, y + offset, width, height)
-                    }),
-            );
-            y += button_height + gap;
         } else if index == BINDINGS_PAGE {
             (positions, y) = profiles::layout(page, width, unit, gap);
         } else if index == SETTINGS_PAGE {

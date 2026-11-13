@@ -31,7 +31,11 @@ try {
     & ./tools/build_windows_tests.ps1 -Architecture $Architecture
     }
     $testTools = Join-Path $projectRoot "target/tests-$Architecture"
-    $fixture = Get-Content -Raw -LiteralPath typing-core/tests/fixtures/aldetl-installed.ini
+    $legacyFixture = Get-Content -Raw -LiteralPath typing-core/tests/fixtures/aldetl-installed.ini
+    # Retain legacy application settings and exercise the current shipped
+    # mappings. The original fixture remains unchanged for import comparisons.
+    $fixture = $legacyFixture.Substring(0, $legacyFixture.IndexOf('[modekeys]', [StringComparison]::Ordinal)) +
+        (Get-Content -Raw -LiteralPath resources/profiles/default.typing.ini)
     $fixture += [Environment]::NewLine + "[common]" + [Environment]::NewLine + "hotkey=Control+Shift+F12" + [Environment]::NewLine + "[modekeys]" + [Environment]::NewLine +
         "Left=Right" + [Environment]::NewLine + "Z=Control+Shift+F12" + [Environment]::NewLine + "A=step1000000" + [Environment]::NewLine +
         "[hotkeys]" + [Environment]::NewLine + "F10=Control+Shift+F12" + [Environment]::NewLine

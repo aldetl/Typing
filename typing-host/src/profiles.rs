@@ -1846,19 +1846,37 @@ mod tests {
         assert!(error.contains("CapsLock: legacy [no mapping]; profile [command mode:"));
     }
     #[test]
-    fn packaged_profile_is_complete_and_matches_installed_bindings() {
+    fn packaged_profile_matches_legacy_except_removed_right_shift_caps_triggers() {
         let profile = Profile::parse(
             include_str!("../../resources/profiles/default.typing.ini"),
             None,
         )
         .unwrap();
+        let legacy = include_str!("../../typing-core/tests/fixtures/aldetl-installed.ini")
+            .lines()
+            .filter(|line| {
+                !matches!(
+                    line.trim(),
+                    "RShiftKey+CapsLock=CapsLock" | "CapsLock+RShiftKey=CapsLock"
+                )
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
         assert!(
-            profile.config.same_bindings(
-                &Config::parse(include_str!(
-                    "../../typing-core/tests/fixtures/aldetl-installed.ini"
-                ))
+            profile
+                .config
+                .same_bindings(&Config::parse(&legacy).unwrap())
+        );
+        for trigger in ["RShiftKey+CapsLock", "CapsLock+RShiftKey"] {
+            assert!(profile.config.binding(trigger.parse().unwrap()).is_none());
+        }
+        assert_eq!(
+            profile
+                .config
+                .binding("CapsLock+Space".parse().unwrap())
                 .unwrap()
-            )
+                .command,
+            typing_core::Command::Keys(typing_core::Chord::single(Key::CAPS_LOCK))
         );
         let application = Application::parse(
             PathBuf::from("C:/Typing/configuration.ini"),

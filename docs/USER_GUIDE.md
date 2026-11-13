@@ -36,6 +36,8 @@ Open **Help** for a short introduction and examples of Vim and Emacs style caret
 
 A **mode key** toggles command mode when you press and release it alone. Holding it while pressing another key can run a configured shortcut instead. For example, the default **Caps Lock+J** moves left without first entering command mode.
 
+The default profile uses Caps Lock as a mode key instead of its original capitalization toggle. To send the original **Caps Lock** key, hold **Caps Lock**, then press **Space** to turn capitalization on or off; this works with command mode either on or off.
+
 Mappings with **Command mode** type run in command mode. Mappings with **Hotkey** type also work with command mode off, while Typing is enabled. Unmatched input passes through to the foreground application.
 
 The cursor highlight shows command-mode or Caps Lock feedback when configured. When both apply, it shows two colored half-circles. The tray icon also distinguishes disabled, enabled, and command-mode states.
@@ -58,13 +60,17 @@ These keys run in command mode:
 | **Y / T** | Insert the local date / time. |
 | **G** | Leave command mode. |
 
+![Default command-mode movement keys: U sends Home, I moves up, O sends End, P moves one word right; H moves one word left, J moves left, K moves down, and L moves right; N sends Page Up and M sends Page Down.](assets/command-mode-movement.png)
+
+*Default command-mode movement keys.* Home and End follow the application's cursor behavior.
+
 A step applies to the next movement attempt. For reversible direction pairs, that count remains in use for the pair until changed or command mode resets. For example, **S**, then **J**, moves left five times; **L** then moves right five times. Use **F** before a movement to restore its count to one. Home and End do not retain a count.
 
 **Q** reverses a recorded movement; it does not undo document edits. Use your application's usual undo shortcut, such as **Ctrl+Z**, to undo edits.
 
 Selection adds Shift to movement output. Tap **V** again to turn it off. Leaving command mode clears selection and movement counts; entering command mode also clears movement history.
 
-The default profile uses Caps Lock as a mode key. Use **Caps Lock+Space** to toggle the operating system's Caps Lock state.
+The mapping editor's **Caps Lock** action supplies the capitalization toggle (`CapsLock` or `capslock` in a profile file). Right Shift combinations do not toggle capitalization in the default profile. While Caps Lock is a mode key, overlapping another key suppresses its normal capitalization function; only an isolated tap switches command mode.
 
 ## Customize mappings
 

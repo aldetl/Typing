@@ -57,16 +57,9 @@ static BOOL CALLBACK find_about(HWND window,LPARAM output) {
     if(pid==client_pid&&wcscmp(title,L"About Typing")==0)*(HWND*)output=window;
     return TRUE;
 }
-static HWND about_content(HWND dialog) {
-    HWND text=NULL;wchar_t content[2048];
-    while((text=FindWindowExW(dialog,text,L"STATIC",NULL))!=NULL) {
-        if(GetWindowTextW(text,content,ARRAYSIZE(content))>0&&wcsstr(content,L"Typing "))return text;
-    }
-    return NULL;
-}
 static HWND wait_about(void) {
     HWND dialog=NULL;ULONGLONG until=GetTickCount64()+5000;
-    do {EnumWindows(find_about,(LPARAM)&dialog);if(dialog&&IsWindowVisible(dialog)&&about_content(dialog))return dialog;pump(10);}while(GetTickCount64()<until);
+    do {EnumWindows(find_about,(LPARAM)&dialog);if(dialog&&IsWindowVisible(dialog)&&!IsWindowEnabled(client))return dialog;pump(10);}while(GetTickCount64()<until);
     return NULL;
 }
 static BOOL CALLBACK find_guide(HWND window,LPARAM output) {
@@ -194,7 +187,10 @@ int wmain(int argc,wchar_t **argv) {
     HWND about,guide,open_guide,introduction,dialog=NULL;RECT rect={0},outer;DWORD exit_code=99;
     int inspect=0;
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
-    if(argc==3&&wcscmp(argv[1],L"--quit")==0) {
+    if(argc==3&&wcscmp(argv[1],L"--show")==0) {
+        client_pid=wcstoul(argv[2],NULL,10);EnumWindows(find_client,0);
+        return client&&PostMessageW(client,WM_COMMAND,1004,0)?0:1;
+    } else if(argc==3&&wcscmp(argv[1],L"--quit")==0) {
         client_pid=wcstoul(argv[2],NULL,10);process=OpenProcess(SYNCHRONIZE|PROCESS_QUERY_LIMITED_INFORMATION,FALSE,client_pid);
         if(!process)return 2;EnumWindows(find_client,0);
         if(!client||!PostMessageW(client,WM_COMMAND,1003,0)||WaitForSingleObject(process,5000)!=WAIT_OBJECT_0){CloseHandle(process);return 1;}
@@ -219,6 +215,11 @@ int wmain(int argc,wchar_t **argv) {
     CHECK(page(L"Command")==NULL);
     about=GetDlgItem(page(L"Help"),2007);open_guide=GetDlgItem(page(L"Help"),2012);
     introduction=GetDlgItem(page(L"Help"),2013);CHECK(about&&open_guide&&introduction);
+    {HWND label=GetDlgItem(page(L"Help"),2023),picture=GetDlgItem(page(L"Help"),2024);wchar_t text[256];
+        CHECK(label&&picture&&GetWindowTextW(label,text,ARRAYSIZE(text))>0);
+        CHECK(wcscmp(text,L"Default cursor movement key mapping")==0);
+        CHECK(GetWindowTextW(picture,text,ARRAYSIZE(text))>0&&wcsstr(text,L"N Page Up, M Page Down"));
+        CHECK((GetWindowLongW(picture,GWL_STYLE)&WS_TABSTOP)==0);}
     CHECK(GetDlgItem(page(L"Help"),2011)==NULL);
     {const wchar_t *expected[]={L"move the caret quickly",L"Default profile",L"\x2022 Vim style:",L"\x2022 Emacs style:",L"\x2022 Key mapping:",L"Ctrl+Left"};
         wchar_t content[2048];CHECK(GetWindowTextW(introduction,content,2048)>0);
@@ -258,7 +259,8 @@ int wmain(int argc,wchar_t **argv) {
     CHECK(page(L"Hook diagnostics")==NULL);
     CHECK(GetDlgItem(page(L"Event diagnostics"),2005)&&GetDlgItem(page(L"Event diagnostics"),2018));CHECK(GetDlgItem(page(L"Event diagnostics"),2003)==NULL&&GetDlgItem(page(L"Event diagnostics"),2004)==NULL&&GetDlgItem(page(L"Event diagnostics"),2006)==NULL);CHECK(FindWindowExW(page(L"Event diagnostics"),NULL,L"SysListView32",NULL)!=NULL);
     CHECK(FindWindowExW(page(L"Help"),NULL,L"SysListView32",NULL)==NULL);
-    CHECK(FindWindowExW(page(L"Help"),NULL,L"EDIT",NULL)==introduction);
+    CHECK(FindWindowExW(page(L"Help"),NULL,L"EDIT",NULL)==GetDlgItem(page(L"Help"),2023));
+    CHECK(FindWindowExW(page(L"Help"),GetDlgItem(page(L"Help"),2023),L"EDIT",NULL)==introduction);
     {
         const wchar_t *titles[]={L"Mapping Profile",L"Event diagnostics",L"Settings",L"Help"};
         HWND tabs=GetDlgItem(client,2000);
@@ -273,6 +275,25 @@ int wmain(int argc,wchar_t **argv) {
         }
     }
     puts("PASS Mapping Profile/Event diagnostics/Settings/Help order, startup checkbox, and short introduction");fflush(stdout);
+    {HWND help=page(L"Help"),picture=GetDlgItem(help,2024);RECT original,wide,narrow,button,viewport;
+        CHECK(GetWindowRect(client,&original)&&GetWindowRect(picture,&wide));
+        CHECK(SetWindowPos(client,NULL,0,0,MulDiv(360,(int)GetDpiForWindow(client),96),original.bottom-original.top,SWP_NOMOVE|SWP_NOZORDER));
+        CHECK(GetWindowRect(picture,&narrow)&&narrow.right-narrow.left<=wide.right-wide.left);
+        CHECK(block_fits(GetDlgItem(help,2023)));
+        for(unsigned step=0;step<20;step++)SendMessageW(picture,WM_MOUSEWHEEL,(WPARAM)0x00780000,0);
+        for(unsigned step=0;step<20;step++){
+            CHECK(GetWindowRect(help,&viewport)&&GetWindowRect(open_guide,&button));
+            if(button.bottom<=viewport.bottom)break;
+            SendMessageW(picture,WM_MOUSEWHEEL,(WPARAM)(DWORD)0xff880000,0);}
+        CHECK(GetWindowRect(help,&viewport)&&GetWindowRect(open_guide,&button));
+        CHECK(button.top>=viewport.top&&button.bottom<=viewport.bottom);
+        CHECK(SetWindowPos(client,NULL,0,0,original.right-original.left,original.bottom-original.top,SWP_NOMOVE|SWP_NOZORDER));
+        for(unsigned step=0;step<20;step++)SendMessageW(picture,WM_MOUSEWHEEL,(WPARAM)0x00780000,0);}
+    puts("PASS Help picture proportional narrow resizing, label wrapping, and button scroll reachability");fflush(stdout);
+    if(GetForegroundWindow()!=client){ULONGLONG until=GetTickCount64()+60000;
+        puts("Activate the Typing test window to verify its modal dialogs.");fflush(stdout);
+        while(GetForegroundWindow()!=client&&GetTickCount64()<until)pump(20);
+        CHECK(GetForegroundWindow()==client);}
     PostMessageW(open_guide,BM_CLICK,0,0);dialog=wait_guide();CHECK(dialog!=NULL);
     CHECK(GetWindow(dialog,GW_OWNER)==client&&!IsWindowEnabled(client));
     CHECK((GetWindowLongW(dialog,GWL_STYLE)&WS_THICKFRAME)!=0);
@@ -326,8 +347,16 @@ int wmain(int argc,wchar_t **argv) {
             {HWND checkbox=GetDlgItem(page(L"Settings"),2019);RECT check_bounds;
                 CHECK(GetWindowRect(checkbox,&check_bounds));
                 CHECK(check_bounds.right>check_bounds.left&&check_bounds.bottom-check_bounds.top>=labs(logical.lfHeight));}
-            {RECT content,button;CHECK(GetWindowRect(introduction,&content));CHECK(GetWindowRect(open_guide,&button));
-                CHECK(content.bottom<=bounds.top&&content.bottom<=button.top&&button.right>button.left);}
+            {RECT content,label,picture,button,about_bounds;HWND help=page(L"Help");
+                CHECK(GetWindowRect(introduction,&content)&&GetWindowRect(GetDlgItem(help,2023),&label));
+                CHECK(GetWindowRect(GetDlgItem(help,2024),&picture)&&GetWindowRect(open_guide,&button));
+                CHECK(GetWindowRect(about,&about_bounds));
+                CHECK(label.bottom<picture.top&&picture.bottom<content.top&&button.bottom<content.top);
+                CHECK(about_bounds.bottom<button.top&&about_bounds.right==button.right&&about_bounds.left==button.left);
+                if(button.left>picture.right)CHECK(about_bounds.top==picture.top);
+                CHECK(picture.right>picture.left&&button.right>button.left);
+                CHECK(labs((picture.right-picture.left)*930-(picture.bottom-picture.top)*1140)<=1140);
+                CHECK(block_fits(GetDlgItem(help,2023)));}
             CHECK(block_fits(introduction));
             CHECK(block_fits(FindWindowExW(page(L"Settings"),NULL,L"EDIT",NULL)));
         }
@@ -351,15 +380,13 @@ int wmain(int argc,wchar_t **argv) {
     puts("PASS tray double-click callback toggles latest requested target");
     PostMessageW(about,BM_CLICK,0,0);dialog=wait_about();CHECK(dialog!=NULL);
     CHECK(GetWindow(dialog,GW_OWNER)==client&&!IsWindowEnabled(client));
-    {HWND text=about_content(dialog);wchar_t content[2048];RECT bounds={0},required={0};
-        CHECK(text&&GetWindowTextW(text,content,ARRAYSIZE(content))>0);
-        CHECK(wcsstr(content,L"https://github.com/aldetl/Typing")&&wcsstr(content,L"https://xdetail.org/typing"));
-        CHECK(wcsstr(content,L"convenient key mapping"));
-        CHECK(GetClientRect(text,&bounds));required.right=bounds.right;
-        HDC dc=GetDC(text);HGDIOBJ font=SelectObject(dc,(HFONT)SendMessageW(text,WM_GETFONT,0,0));
-        int height=DrawTextW(dc,content,-1,&required,DT_CALCRECT|DT_WORDBREAK|DT_NOPREFIX);
-        SelectObject(dc,font);ReleaseDC(text,dc);CHECK(height>0&&height<=bounds.bottom);}
-    PostMessageW(dialog,WM_CLOSE,0,0);CHECK(dismissed(dialog));dialog=NULL;
+    {RECT bounds;MONITORINFO monitor={0};monitor.cbSize=sizeof(monitor);
+        CHECK(GetWindowRect(dialog,&bounds));
+        CHECK(GetMonitorInfoW(MonitorFromWindow(dialog,MONITOR_DEFAULTTONEAREST),&monitor));
+        CHECK(bounds.left>=monitor.rcWork.left&&bounds.top>=monitor.rcWork.top&&bounds.right<=monitor.rcWork.right&&bounds.bottom<=monitor.rcWork.bottom);
+    }
+    /* Task-dialog buttons are virtual controls; activate them through the public task-dialog API. */
+    SendMessageW(dialog,TDM_CLICK_BUTTON,IDOK,0);CHECK(dismissed(dialog));dialog=NULL;
     CHECK(GetWindowRect(client,&outer));
     SendMessageW(client,WM_ENTERSIZEMOVE,0,0);SendMessageW(client,WM_SIZING,WMSZ_BOTTOMRIGHT,(LPARAM)&outer);
     CHECK(SetWindowPos(client,NULL,0,0,outer.right-outer.left+40,outer.bottom-outer.top+30,SWP_NOMOVE|SWP_NOZORDER));
