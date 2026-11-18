@@ -31,7 +31,7 @@ fn command(executable: &Path) -> Result<Vec<u16>, Message> {
     if path.len() + 2 > MAX_COMMAND {
         return Err(msg!(
             "startup.the_executable_path_is_too_long",
-            "The executable path is too long for Windows startup. Move Typing to a shorter folder path and try again."
+            "The executable path is too long for Windows startup. Move TypingVE to a shorter folder path and try again."
         ));
     }
     Ok(std::iter::once(b'"' as u16)
@@ -176,7 +176,7 @@ impl Registration<'_> {
 
 pub fn is_registered() -> Result<bool, Message> {
     let executable = std::env::current_exe()
-        .map_err(|e| msg!("startup.locate_typing", "Locate Typing: {e}", e = e))?;
+        .map_err(|e| msg!("startup.locate_typing", "Locate TypingVE: {e}", e = e))?;
     Registration { subkey: RUN_KEY }.matches(&executable)
 }
 
@@ -184,7 +184,7 @@ pub fn set_enabled(enabled: bool) -> Result<(), Message> {
     let registration = Registration { subkey: RUN_KEY };
     if enabled {
         let executable = std::env::current_exe()
-            .map_err(|e| msg!("startup.locate_typing", "Locate Typing: {e}", e = e))?;
+            .map_err(|e| msg!("startup.locate_typing", "Locate TypingVE: {e}", e = e))?;
         registration.enable(&executable)
     } else {
         registration.disable()
@@ -234,7 +234,7 @@ mod tests {
     fn enable_roundtrips_unicode_and_spaces_and_disable_removes_only_typing() {
         let fixture = Fixture::new();
         let registration = fixture.registration();
-        let executable = Path::new(r"C:\应用程序\Typing folder\Typing.exe");
+        let executable = Path::new(r"C:\应用程序\Typing folder\TypingVE.exe");
         assert!(!registration.matches(executable).unwrap());
         registration.disable().unwrap();
         registration.enable(executable).unwrap();
@@ -262,7 +262,7 @@ mod tests {
         assert_eq!(kind, REG_SZ);
         assert_eq!(
             &saved[..size as usize / 2],
-            wide("\"C:\\应用程序\\Typing folder\\Typing.exe\"")
+            wide("\"C:\\应用程序\\Typing folder\\TypingVE.exe\"")
         );
         let neighbor = wide("OtherApp");
         let bytes = wide("keep");
@@ -315,8 +315,8 @@ mod tests {
     fn moved_copy_replaces_stale_registration_and_can_cancel_it() {
         let fixture = Fixture::new();
         let registration = fixture.registration();
-        let old = Path::new(r"C:\old\Typing.exe");
-        let new = Path::new(r"D:\new\Typing.exe");
+        let old = Path::new(r"C:\old\TypingVE.exe");
+        let new = Path::new(r"D:\new\TypingVE.exe");
         registration.enable(old).unwrap();
         assert!(!registration.matches(new).unwrap());
         registration.enable(new).unwrap();
@@ -333,13 +333,13 @@ mod tests {
     fn invalid_commands_do_not_overwrite_existing_registration() {
         let fixture = Fixture::new();
         let registration = fixture.registration();
-        let valid = Path::new(r"C:\Typing\Typing.exe");
+        let valid = Path::new(r"C:\Typing\TypingVE.exe");
         registration.enable(valid).unwrap();
         for invalid in [
             "relative.exe".to_string(),
             "C:\\bad\"path.exe".to_string(),
             "C:\\bad\0path.exe".to_string(),
-            format!("C:\\{}\\Typing.exe", "a".repeat(260)),
+            format!("C:\\{}\\TypingVE.exe", "a".repeat(260)),
         ] {
             assert!(registration.enable(Path::new(&invalid)).is_err());
             assert!(registration.matches(valid).unwrap());

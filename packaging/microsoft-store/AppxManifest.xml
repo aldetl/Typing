@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Package xmlns="http://schemas.microsoft.com/appx/manifest/foundation/windows10"
+         xmlns:uap="http://schemas.microsoft.com/appx/manifest/uap/windows10"
+         xmlns:uap10="http://schemas.microsoft.com/appx/manifest/uap/windows10/10"
+         xmlns:desktop="http://schemas.microsoft.com/appx/manifest/desktop/windows10"
+         xmlns:rescap="http://schemas.microsoft.com/appx/manifest/foundation/windows10/restrictedcapabilities"
+         IgnorableNamespaces="uap uap10 desktop rescap">
+  <Identity Name="REQUIRES-PARTNER-CENTER-IDENTITY" Publisher="CN=REQUIRES-PARTNER-CENTER-PUBLISHER" Version="1.0.0.0" ProcessorArchitecture="x64" />
+  <Properties>
+    <DisplayName>REQUIRES-RESERVED-DISPLAY-NAME</DisplayName>
+    <PublisherDisplayName>REQUIRES-PUBLISHER-DISPLAY-NAME</PublisherDisplayName>
+    <Description>Keyboard navigation and remapping</Description>
+    <Logo>Assets\StoreLogo.png</Logo>
+  </Properties>
+  <Resources>
+    <Resource Language="en-US" />
+    <Resource Language="zh-CN" />
+  </Resources>
+  <Dependencies>
+    <TargetDeviceFamily Name="Windows.Desktop" MinVersion="10.0.19041.0" MaxVersionTested="10.0.19041.0" />
+  </Dependencies>
+  <Applications>
+    <Application Id="Typing" Executable="TypingVE.exe" EntryPoint="Windows.FullTrustApplication"
+                 uap10:RuntimeBehavior="packagedClassicApp" uap10:TrustLevel="mediumIL">
+      <uap:VisualElements DisplayName="REQUIRES-RESERVED-DISPLAY-NAME" Description="Keyboard navigation and remapping"
+                          BackgroundColor="transparent" Square150x150Logo="Assets\Square150x150Logo.png" Square44x44Logo="Assets\Square44x44Logo.png" />
+      <Extensions>
+        <desktop:Extension Category="windows.startupTask" Executable="TypingVE.exe" EntryPoint="Windows.FullTrustApplication" uap10:Parameters="--startup">
+          <desktop:StartupTask TaskId="TypingStartup" Enabled="false" DisplayName="TypingVE" />
+        </desktop:Extension>
+      </Extensions>
+    </Application>
+  </Applications>
+  <Capabilities>
+    <rescap:Capability Name="runFullTrust" />
+  </Capabilities>
+</Package>

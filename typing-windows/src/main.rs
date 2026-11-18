@@ -7,11 +7,14 @@ compile_error!("The Windows host requires Windows x86 or x64.");
 
 mod compatibility;
 mod desktop;
+mod distribution;
 mod inputsim;
 mod language;
 mod logging;
 mod output;
 mod startup;
+mod store;
+mod store_instance;
 mod ui;
 use typing_core::{JoinMessages, Message, MessageValue, msg};
 
@@ -47,6 +50,7 @@ const QUIT: usize = 1003;
 const SHOW: usize = 1004;
 const TOGGLE: usize = 1005;
 const WM_DESKTOP: u32 = WM_APP + 5;
+const WM_STORE_SHOW: u32 = WM_APP + 86;
 const MODIFIER_CODES: [u16; 8] = [160, 161, 162, 163, 164, 165, 91, 92];
 fn modifier_keys() -> [Key; 8] {
     MODIFIER_CODES.map(|code| Key::from_code(code).unwrap())
@@ -1120,15 +1124,21 @@ unsafe extern "system" fn main_window(window: HWND, message: u32, w: WPARAM, l: 
                 }
             }
             ui::refresh();
-            language::set_caption(window, &msg!("main.typing", "Typing - {text}", text = text));
+            language::set_caption(
+                window,
+                &msg!("main.typing", "TypingVE - {text}", text = text),
+            );
             if quit {
                 if failed {
                     unsafe {
                         MessageBoxW(
                             window,
                             wide(&text).as_ptr(),
-                            wide(&msg!("ui.typing_cleanup_warning", "Typing cleanup warning"))
-                                .as_ptr(),
+                            wide(&msg!(
+                                "ui.typing_cleanup_warning",
+                                "TypingVE cleanup warning"
+                            ))
+                            .as_ptr(),
                             MB_OK | MB_ICONWARNING,
                         );
                     }
@@ -1208,7 +1218,7 @@ fn create_window(class: &str, title: &str, procedure: WNDPROC) -> Result<HWND, M
             0,
             name.as_ptr(),
             wide(title).as_ptr(),
-            if title.starts_with("Typing -") {
+            if title.starts_with("TypingVE -") {
                 WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN
             } else {
                 0
@@ -1274,7 +1284,7 @@ fn load_configuration(
     })?;
     let help = msg!(
         "main.edit_or_restore_configuration_ini_then",
-        "Edit or restore configuration.ini, then restart Typing. No keyboard handling was started and the file was not changed."
+        "Edit or restore configuration.ini, then restart TypingVE. No keyboard handling was started and the file was not changed."
     );
     let text = std::fs::read_to_string(&path).map_err(|error| {
         msg!(
@@ -1317,39 +1327,37 @@ fn load_configuration(
     Ok((text, config, feedback, profiles))
 }
 
-fn run() -> Result<(), Message> {
+fn run(runtime: &mut Option<store::Runtime>) -> Result<(), Message> {
     ui::prepare_process();
     let directory = std::env::current_exe()
         .map_err(|error| Message::from(error.to_string()))?
         .parent()
         .unwrap()
         .to_path_buf();
-    language::initialize(directory.clone());
-    let mut config_path = directory.join("configuration.ini");
-    let mut dll_path = directory.join("inputsim.dll");
-    let mut preference_path = ui::preference_path();
-    let mut log_path = preference_path.with_file_name("typing.log");
-    let mut arguments = std::env::args_os().skip(1);
-    while let Some(option) = arguments.next() {
-        let value = arguments.next().ok_or_else(|| {
-            msg!(
-                "main.expected_a_path_after_each_option",
-                "expected a path after each option"
-            )
-        })?;
-        match option.to_str() {
-            Some("--config") => config_path = PathBuf::from(value),
-            Some("--inputsim") => dll_path = PathBuf::from(value),
-            Some("--log") => log_path = PathBuf::from(value),
-            Some("--state") => preference_path = PathBuf::from(value),
-            _ => {
-                return Err(msg!(
-                    "main.options_are_config_inputsim_log_and",
-                    "options are --config, --inputsim, --log, and --state"
-                ));
-            }
-        }
-    }
+    let family = distribution::package_family()?;
+    *runtime = Some(store::Runtime::initialize(family.is_some())?);
+    let context = distribution::Context::resolve(directory, family)?;
+    // Preserve early localized portable errors without ever reading portable
+    // preferences when this process has package identity.
+    language::initialize(
+        context.resources.clone(),
+        context.language_preference.clone(),
+    );
+    let context = context.arguments(std::env::args_os().skip(1).collect())?;
+    distribution::initialize(context.clone())?;
+    let mut instance = if let Some(family) = &context.family {
+        let Some(instance) = store_instance::Instance::enter(family, context.show)? else {
+            return Ok(());
+        };
+        Some(instance)
+    } else {
+        None
+    };
+    context.prepare_data()?;
+    let config_path = context.config;
+    let dll_path = context.inputsim;
+    let preference_path = context.preference;
+    let log_path = context.log;
     logging::start(log_path, env!("CARGO_PKG_VERSION"));
     language::log_diagnostics();
     let (text, config, feedback, profiles) = load_configuration(&config_path)?;
@@ -1394,12 +1402,12 @@ fn run() -> Result<(), Message> {
     );
     let main = create_window(
         "TypingWindowsClient",
-        &language::render(&msg!("main.starting", "Typing - Starting")),
+        &language::render(&msg!("main.starting", "TypingVE - Starting")),
         Some(main_window),
     )?;
     shared.main_window.store(main as u64, Ordering::SeqCst);
     language::root(main);
-    language::set_caption(main, &msg!("main.starting", "Typing - Starting"));
+    language::set_caption(main, &msg!("main.starting", "TypingVE - Starting"));
     if let Err(error) = ui::initialize(main, &text, feedback, preference_path, event_receiver) {
         unsafe {
             DestroyWindow(main);
@@ -1414,9 +1422,17 @@ fn run() -> Result<(), Message> {
         return Err(error);
     }
     logging::info("startup", format_args!("tray and hotkey ready"));
+    if let Some(instance) = &mut instance
+        && let Err(error) = instance.publish(main)
+    {
+        unsafe {
+            DestroyWindow(main);
+        }
+        return Err(error);
+    }
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
     let hook_thread = thread::spawn(move || {
-        let result = create_window("TypingWindowsHook", "Typing Hook", Some(hook_window));
+        let result = create_window("TypingWindowsHook", "TypingVE Hook", Some(hook_window));
         let succeeded = result.is_ok();
         sender.send(result).unwrap();
         if succeeded {
@@ -1438,6 +1454,11 @@ fn run() -> Result<(), Message> {
         ui::show_profile_recovery();
     } else {
         shared.lifecycle(Lifecycle::Enable);
+    }
+    if context.show {
+        unsafe {
+            PostMessageW(main, WM_STORE_SHOW, 0, 0);
+        }
     }
     message_loop();
     unsafe {
@@ -1471,13 +1492,15 @@ fn main() {
         }
         default_panic(info);
     }));
-    if let Err(error) = run() {
+    // Keep package COM services alive through fatal-error presentation too.
+    let mut runtime = None;
+    if let Err(error) = run(&mut runtime) {
         logging::error("startup", format_args!("{error}"));
         unsafe {
             MessageBoxW(
                 0,
                 wide(&error).as_ptr(),
-                wide(&msg!("ui.typing_startup_error", "Typing startup error")).as_ptr(),
+                wide(&msg!("ui.typing_startup_error", "TypingVE startup error")).as_ptr(),
                 MB_OK | MB_ICONERROR,
             );
         }

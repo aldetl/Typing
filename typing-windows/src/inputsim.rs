@@ -39,7 +39,7 @@ pub struct InputSim {
 
 impl InputSim {
     pub fn load(path: &Path) -> Result<Self, Message> {
-        let absolute = path.canonicalize().map_err(|error| msg!("inputsim.cannot_locate_inputsim_dll_keep_the", "Cannot locate InputSim DLL {arg0}: {error}. Keep the matching inputsim.dll beside Typing.exe or specify --inputsim PATH.", arg0 = path.display(), error = error))?;
+        let absolute = path.canonicalize().map_err(|error| msg!("inputsim.cannot_locate_inputsim_dll_keep_the", "Cannot locate InputSim DLL {arg0}: {error}. Keep the matching inputsim.dll beside TypingVE.exe or specify --inputsim PATH.", arg0 = path.display(), error = error))?;
         let name: Vec<u16> = absolute
             .to_string_lossy()
             .encode_utf16()

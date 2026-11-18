@@ -1,4 +1,4 @@
-//! Shared Typing logic. Hosts serialize calls to [`Core`] and execute output
+//! Shared TypingVE logic. Hosts serialize calls to [`Core`] and execute output
 //! without holding access to it. Own tagged events bypass [`Core::input`].
 //!
 //! A host queues the requests returned by `input` and `check_inactivity` in FIFO

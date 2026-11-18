@@ -4,7 +4,7 @@ use std::fmt::Write;
 
 /// Short Help-page copy, separate from the complete user guide.
 pub const INTRODUCTION: [&str; 5] = [
-    "Typing lets you move the caret quickly with Vim and Emacs style controls and perform convenient actions through custom key mappings wherever you type.",
+    "TypingVE lets you move the caret quickly with Vim and Emacs style controls and perform convenient actions through custom key mappings wherever you type.",
     "For example, with the Default profile:",
     "    • Vim style: Tap “Caps Lock” to enter command mode, then press “I / J / K / L” to move up / left / down / right.",
     "    • Emacs style: Hold “Caps Lock” and press “I / J / K / L” to move up / left / down / right directly.",
@@ -22,7 +22,7 @@ pub fn introduction_text() -> String {
 pub fn introduction_message() -> typing_core::Message {
     typing_core::msg!(
         "help.introduction",
-        "Typing lets you move the caret quickly with Vim and Emacs style controls and perform convenient actions through custom key mappings wherever you type.\r\n\r\nFor example, with the Default profile:\r\n    • Vim style: Tap “Caps Lock” to enter command mode, then press “I / J / K / L” to move up / left / down / right.\r\n    • Emacs style: Hold “Caps Lock” and press “I / J / K / L” to move up / left / down / right directly.\r\n    • Key mapping: “Alt+C” → “Ctrl+C” does copy operation. “Alt+H” → “Ctrl+Left” moves cursor to the beginning of a word."
+        "TypingVE lets you move the caret quickly with Vim and Emacs style controls and perform convenient actions through custom key mappings wherever you type.\r\n\r\nFor example, with the Default profile:\r\n    • Vim style: Tap “Caps Lock” to enter command mode, then press “I / J / K / L” to move up / left / down / right.\r\n    • Emacs style: Hold “Caps Lock” and press “I / J / K / L” to move up / left / down / right directly.\r\n    • Key mapping: “Alt+C” → “Ctrl+C” does copy operation. “Alt+H” → “Ctrl+Left” moves cursor to the beginning of a word."
     )
 }
 

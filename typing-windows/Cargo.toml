@@ -1,12 +1,12 @@
 [package]
 name = "typing-windows"
-version = "1.5.1"
+version = "1.5.2"
 edition = "2024"
 publish = false
 license-file = "../LICENSE"
 
 [[bin]]
-name = "Typing"
+name = "TypingVE"
 path = "src/main.rs"
 
 [dependencies]
@@ -18,6 +18,7 @@ windows-sys = { version = "0.52", features = [
     "Win32_Graphics_Gdi",
     "Win32_Graphics_GdiPlus",
     "Win32_Security",
+    "Win32_Security_Authorization",
     "Win32_System_LibraryLoader",
     "Win32_System_Com",
     "Win32_System_SystemServices",
@@ -36,3 +37,6 @@ windows-sys = { version = "0.52", features = [
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ] }
+
+[target.'cfg(target_arch = "x86_64")'.dependencies]
+windows = { version = "0.52", features = ["ApplicationModel", "Foundation", "Storage", "Win32_System_WinRT"] }

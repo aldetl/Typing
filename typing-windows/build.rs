@@ -7,11 +7,28 @@ fn main() {
     let source = PathBuf::from(env::var_os("CARGO_MANIFEST_DIR").unwrap()).join("res");
     let out = PathBuf::from(env::var_os("OUT_DIR").unwrap());
     let resource = out.join("typing.rc");
+    let version = env::var("CARGO_PKG_VERSION").unwrap();
+    let numeric: Vec<u16> = version
+        .split('.')
+        .map(|part| part.parse().unwrap())
+        .collect();
+    assert_eq!(numeric.len(), 3, "Windows version needs major.minor.patch");
+    let numeric = format!("{},{},{},0", numeric[0], numeric[1], numeric[2]);
     let path = |name: &str| source.join(name).to_string_lossy().replace('\\', "/");
     fs::write(
         &resource,
         format!(
-            "1 24 \"{}\"\n100 ICON \"{}\"\n101 ICON \"{}\"\n102 ICON \"{}\"\n103 ICON \"{}\"\n",
+            "1 24 \"{}\"\n100 ICON \"{}\"\n101 ICON \"{}\"\n102 ICON \"{}\"\n103 ICON \"{}\"\n\
+             1 VERSIONINFO\nFILEVERSION {numeric}\nPRODUCTVERSION {numeric}\n\
+             FILEFLAGSMASK 0x3fL\nFILEFLAGS 0\nFILEOS 0x40004L\nFILETYPE 0x1L\nFILESUBTYPE 0\n\
+             BEGIN\nBLOCK \"StringFileInfo\"\nBEGIN\nBLOCK \"040904b0\"\nBEGIN\n\
+             VALUE \"FileDescription\", \"TypingVE\\0\"\n\
+             VALUE \"ProductName\", \"TypingVE\\0\"\n\
+             VALUE \"InternalName\", \"TypingVE.exe\\0\"\n\
+             VALUE \"OriginalFilename\", \"TypingVE.exe\\0\"\n\
+             VALUE \"FileVersion\", \"{version}\\0\"\n\
+             VALUE \"ProductVersion\", \"{version}\\0\"\n\
+             END\nEND\nBLOCK \"VarFileInfo\"\nBEGIN\nVALUE \"Translation\", 0x409, 1200\nEND\nEND\n",
             path("typing.manifest"),
             path("main.ico"),
             path("icon1.ico"),
@@ -41,5 +58,5 @@ fn main() {
         .status()
         .unwrap();
     assert!(status.success(), "resource compilation failed");
-    println!("cargo:rustc-link-arg-bin=Typing={}", compiled.display());
+    println!("cargo:rustc-link-arg-bin=TypingVE={}", compiled.display());
 }

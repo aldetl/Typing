@@ -22,6 +22,10 @@ try {
     }
     & (Join-Path $output 'profiles_ui.exe') --check-paths
     if ($LASTEXITCODE -ne 0) { throw "Profile test path checks failed ($Architecture)" }
+    if ($Architecture -eq 'x64') {
+        & $compiler /nologo /W4 /WX /TC /std:c11 /MT /X @includes typing-windows/tests/store_activation.c "/Fo$output/store_activation.obj" "/Fe$output/store_activation.exe" /link @libraries user32.lib ole32.lib uuid.lib
+        if ($LASTEXITCODE -ne 0) { throw 'Store activation test build failed' }
+    }
     & $compiler /nologo /W4 /WX /TC /std:c11 /MT /LD /X @includes typing-windows/tests/inputsim_failure_proxy.c "/Fo$output/inputsim_failure_proxy.obj" "/Fe$output/inputsim_failure_proxy.dll" /link @libraries "/IMPLIB:$output/inputsim_failure_proxy.lib" /EXPORT:resolve_key_v1 /EXPORT:resolve_char_v1 /EXPORT:submit_v1
     if ($LASTEXITCODE -ne 0) { throw "Failure proxy build failed ($Architecture)" }
 } finally { Pop-Location }

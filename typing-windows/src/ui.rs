@@ -165,6 +165,7 @@ const MOVEMENT_PICTURE: usize = 2024;
 const CLEAR_EVENTS: usize = 2018;
 const START_WITH_WINDOWS: usize = 2019;
 const WM_LAYOUT_CONTENT: u32 = WM_APP + 84;
+const WM_STARTUP_RESULT: u32 = WM_APP + 87;
 const BASE_SPACING: i32 = 10;
 
 thread_local! {
@@ -211,6 +212,7 @@ struct Desktop {
     key_list: HWND,
     keyboard_events: HWND,
     startup_checked: Option<bool>,
+    startup_request: Option<(bool, Receiver<Result<store::StartupState, Message>>)>,
     pause_reasons: u8,
     resume_seen: bool,
     power_notifications: Option<compatibility::PowerNotification>,
@@ -498,7 +500,7 @@ pub fn initialize(
         CreateWindowExW(
             WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_NOACTIVATE | WS_EX_TOOLWINDOW | WS_EX_TOPMOST,
             overlay_name.as_ptr(),
-            wide(&msg!("ui.cursor_feedback", "Typing cursor feedback")).as_ptr(),
+            wide(&msg!("ui.cursor_feedback", "TypingVE cursor feedback")).as_ptr(),
             WS_POPUP,
             0,
             0,
@@ -659,7 +661,11 @@ pub fn initialize(
     )?);
     pages[SETTINGS_PAGE].controls.push(text_block(
         settings_page,
-        msg!("ui.start_typing_in_the_system_tray", "Start Typing in the system tray when you sign in.\r\nIf you move the Typing folder, enable this option again from its new location."),
+        if distribution::packaged() {
+            msg!("store.startup_explanation", "Start TypingVE in the system tray when you sign in. You can also manage this in Windows Settings > Apps > Startup.")
+        } else {
+            msg!("ui.start_typing_in_the_system_tray", "Start TypingVE in the system tray when you sign in.\r\nIf you move the TypingVE folder, enable this option again from its new location.")
+        },
         0,
     )?);
     pages[SETTINGS_PAGE]
@@ -704,6 +710,7 @@ pub fn initialize(
         key_list,
         keyboard_events,
         startup_checked: None,
+        startup_request: None,
         pause_reasons: 0,
         resume_seen: false,
         power_notifications: None,
@@ -804,7 +811,7 @@ impl Desktop {
         if changed {
             language::set_caption(
                 self.overlay.window,
-                &msg!("ui.cursor_feedback", "Typing cursor feedback"),
+                &msg!("ui.cursor_feedback", "TypingVE cursor feedback"),
             );
             for (index, title) in tab_titles().iter().enumerate() {
                 let mut text = wide(title);
@@ -914,6 +921,10 @@ impl Desktop {
     }
 
     fn refresh_startup(&mut self) {
+        if distribution::packaged() {
+            self.request_store_startup(None);
+            return;
+        }
         let checkbox = self.pages[SETTINGS_PAGE].controls[0];
         match startup::is_registered() {
             Ok(checked) => {
@@ -940,9 +951,16 @@ impl Desktop {
     }
 
     fn change_startup(&mut self) {
+        if self.startup_request.is_some() {
+            return;
+        }
         let Some(checked) = self.startup_checked else {
             return;
         };
+        if distribution::packaged() {
+            self.request_store_startup(Some(!checked));
+            return;
+        }
         match startup::set_enabled(!checked) {
             Ok(()) => {
                 self.startup_checked = Some(!checked);
@@ -969,12 +987,109 @@ impl Desktop {
         self.layout_page(SETTINGS_PAGE);
     }
 
+    fn request_store_startup(&mut self, enabled: Option<bool>) {
+        if self.startup_request.is_some() {
+            return;
+        }
+        let checkbox = self.pages[SETTINGS_PAGE].controls[0];
+        unsafe {
+            EnableWindow(checkbox, 0);
+        }
+        let (sender, receiver) = std::sync::mpsc::channel();
+        self.startup_request = Some((enabled.is_some(), receiver));
+        let window = self.window;
+        let spawned = std::thread::Builder::new().name("TypingVE startup task".into()).spawn(move || {
+            let result = std::panic::catch_unwind(|| store::startup(enabled)).unwrap_or_else(|_| {
+                Err(msg!("store.startup_worker_failed", "The Windows startup task operation could not finish. Reopen Settings to try again."))
+            });
+            let _ = sender.send(result);
+            unsafe { PostMessageW(window, WM_STARTUP_RESULT, 0, 0); }
+        });
+        if let Err(error) = spawned {
+            self.startup_request = None;
+            unsafe {
+                EnableWindow(
+                    checkbox,
+                    i32::from(enabled.is_some() && self.startup_checked.is_some()),
+                );
+            }
+            self.startup_status(&msg!(
+                "store.startup_error",
+                "Windows startup task operation failed: {error}",
+                error = error
+            ));
+            self.layout_page(SETTINGS_PAGE);
+        }
+    }
+
+    fn complete_store_startup(&mut self) {
+        let Some((change, receiver)) = self.startup_request.take() else {
+            return;
+        };
+        let result = match receiver.try_recv() {
+            Ok(result) => result,
+            Err(std::sync::mpsc::TryRecvError::Empty) => {
+                self.startup_request = Some((change, receiver));
+                return;
+            }
+            Err(_) => Err(msg!(
+                "store.startup_worker_failed",
+                "The Windows startup task operation could not finish. Reopen Settings to try again."
+            )),
+        };
+        let checkbox = self.pages[SETTINGS_PAGE].controls[0];
+        match result {
+            Ok(state) => {
+                let checked = matches!(
+                    state,
+                    store::StartupState::Enabled | store::StartupState::EnabledByPolicy
+                );
+                let editable = matches!(
+                    state,
+                    store::StartupState::Enabled | store::StartupState::Disabled
+                );
+                self.startup_checked = Some(checked);
+                unsafe {
+                    SendMessageW(checkbox, BM_SETCHECK, usize::from(checked), 0);
+                    EnableWindow(checkbox, i32::from(editable));
+                }
+                match state {
+                    store::StartupState::DisabledByUser => self.startup_status(&msg!("store.startup_user_disabled", "Windows has disabled startup for TypingVE. Enable it in Windows Settings > Apps > Startup.")),
+                    store::StartupState::DisabledByPolicy | store::StartupState::EnabledByPolicy => self.startup_status(&msg!("store.startup_policy", "Your Windows policy controls this startup setting.")),
+                    _ => self.startup_status(""),
+                }
+            }
+            Err(error) => {
+                unsafe {
+                    EnableWindow(
+                        checkbox,
+                        i32::from(change && self.startup_checked.is_some()),
+                    );
+                }
+                self.startup_status(&if change {
+                    msg!(
+                        "ui.could_not_change_start_with_windows",
+                        "Could not change Start with Windows. {error}",
+                        error = error
+                    )
+                } else {
+                    msg!(
+                        "ui.could_not_read_start_with_windows",
+                        "Could not read Start with Windows. {error} Reopen Settings to try again.",
+                        error = error
+                    )
+                });
+            }
+        }
+        self.layout_page(SETTINGS_PAGE);
+    }
+
     fn tray_data(&self) -> NOTIFYICONDATAW {
         let mut icon: NOTIFYICONDATAW = unsafe { std::mem::zeroed() };
         icon.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
         icon.hWnd = self.window;
         icon.uID = 1;
-        let tip = wide("Typing");
+        let tip = wide("TypingVE");
         let mut buffer = [0u16; 128];
         buffer[..tip.len()].copy_from_slice(&tip);
         icon.szTip = buffer;
@@ -1759,7 +1874,7 @@ pub fn message(window: HWND, message: u32, w: WPARAM, l: LPARAM) -> Option<LRESU
                 MessageBoxW(
                     window,
                     wide(&error).as_ptr(),
-                    wide(&msg!("ui.typing_user_guide", "Typing User Guide")).as_ptr(),
+                    wide(&msg!("ui.typing_user_guide", "TypingVE User Guide")).as_ptr(),
                     MB_OK | MB_ICONERROR,
                 );
             }
@@ -1775,6 +1890,24 @@ pub fn message(window: HWND, message: u32, w: WPARAM, l: LPARAM) -> Option<LRESU
         };
         let ui = holder.as_mut()?;
         match message {
+            WM_STARTUP_RESULT => {
+                ui.complete_store_startup();
+                Some(0)
+            }
+            WM_STORE_SHOW => {
+                let quitting =
+                    SHARED.get().unwrap().state.lock().unwrap().host.target == Lifecycle::Quit;
+                if !quitting {
+                    ui.show();
+                    let popup = unsafe { GetLastActivePopup(ui.window) };
+                    if popup != ui.window && unsafe { IsWindowVisible(popup) } != 0 {
+                        unsafe {
+                            SetForegroundWindow(popup);
+                        }
+                    }
+                }
+                Some(0)
+            }
             WM_LAYOUT_CONTENT if w < ui.pages.len() => {
                 ui.layout_page(w);
                 Some(0)
