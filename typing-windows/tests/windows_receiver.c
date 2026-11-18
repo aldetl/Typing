@@ -85,7 +85,7 @@ static int focus_receiver(const wchar_t *stage) {
     ULONGLONG deadline = GetTickCount64() + 60000;
     SetForegroundWindow(receiver);
     if (GetForegroundWindow() != receiver) {
-        fwprintf(stdout, L"Activate the Typing integration receiver window (%s).\n", stage);
+        fwprintf(stdout, L"Activate the TypingVE integration receiver window (%s).\n", stage);
         fflush(stdout);
     }
     while (GetForegroundWindow() != receiver && GetTickCount64() < deadline) pump(10);
@@ -199,7 +199,7 @@ static int wait_output(UINT key, unsigned downs, unsigned ups) {
 
 static int reset_client(void) {
     // Observe a fresh completion, rather than the previous Enabled title.
-    SetWindowTextW(client, L"Typing - Transition requested");
+    SetWindowTextW(client, L"TypingVE - Transition requested");
     PostMessageW(client, WM_COMMAND, CLIENT_ENABLE, 0);
     CHECK(wait_status(L"Enabled"));
     return 1;
@@ -380,7 +380,7 @@ static int recovery_cases(void) {
     DWORD session=0;
     CHECK(reset_client());
     CHECK(send_key(VK_CAPITAL,0));
-    SetWindowTextW(client,L"Typing - Missed suspend recovery requested");
+    SetWindowTextW(client,L"TypingVE - Missed suspend recovery requested");
     PostMessageW(client,WM_POWERBROADCAST,PBT_APMRESUMEAUTOMATIC,0);
     CHECK(wait_status(L"Enabled"));
     CHECK(send_key(VK_CAPITAL,1));
@@ -522,7 +522,7 @@ static int held_modifier_cases(void) {
             if (transition != 0) CHECK(send_key('B', 1));
             pump(20);
             CHECK(GetAsyncKeyState((int)key) & 0x8000);
-            SetWindowTextW(client, L"Typing - Held modifier transition requested");
+            SetWindowTextW(client, L"TypingVE - Held modifier transition requested");
             if (transition == 2) {
                 PostMessageW(client, WM_POWERBROADCAST, PBT_APMRESUMEAUTOMATIC, 0);
             } else {
@@ -600,7 +600,7 @@ static BOOL CALLBACK find_warning(HWND window, LPARAM data) {
     wchar_t title[128];
     GetWindowThreadProcessId(window, &pid);
     GetWindowTextW(window, title, ARRAYSIZE(title));
-    if (pid == client_pid && wcscmp(title, L"Typing cleanup warning") == 0) {
+    if (pid == client_pid && wcscmp(title, L"TypingVE cleanup warning") == 0) {
         *(HWND *)data = window;
     }
     return TRUE;
@@ -638,7 +638,7 @@ static int cleanup_case(UINT control, int reject_up) {
         pump(150);
         CHECK(count(native_events,native_count,VK_RSHIFT,0,client_tag)>
               count(native_events,native_count,VK_RSHIFT,1,client_tag));
-        SetWindowTextW(client, L"Typing - Retry requested");
+        SetWindowTextW(client, L"TypingVE - Retry requested");
         PostMessageW(client, WM_COMMAND, CLIENT_DISABLE, 0);
         CHECK(wait_status(L"Disabled"));
         puts("PASS rejected release retained, admission closed, explicit Disable retry succeeds");
@@ -749,7 +749,7 @@ int wmain(int argc, wchar_t **argv) {
     cls.lpszClassName = L"TypingIntegrationReceiver";
     cls.hbrBackground=(HBRUSH)GetStockObject(WHITE_BRUSH);
     if (!RegisterClassW(&cls)) return 2;
-    receiver = CreateWindowExW(0, cls.lpszClassName, L"Typing integration receiver",
+    receiver = CreateWindowExW(0, cls.lpszClassName, L"TypingVE integration receiver",
         WS_OVERLAPPEDWINDOW | WS_VISIBLE, 100, 100, 700, 400, NULL, NULL, cls.hInstance, NULL);
     if (!receiver) return 2;
     if (!wait_start_signal() || !focus_receiver(L"initial setup")) { DestroyWindow(receiver); return 2; }
@@ -808,6 +808,6 @@ int wmain(int argc, wchar_t **argv) {
     if (GetForegroundWindow() == receiver && previous_window) SetForegroundWindow(previous_window);
     DestroyWindow(receiver);
     SetCursorPos(previous_cursor.x, previous_cursor.y);
-    puts(ok ? "PASS Typing live integration" : "FAIL Typing live integration");
+    puts(ok ? "PASS TypingVE live integration" : "FAIL TypingVE live integration");
     return ok ? 0 : 1;
 }

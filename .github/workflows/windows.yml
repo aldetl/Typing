@@ -33,7 +33,7 @@ jobs:
       TYPING_ARCHITECTURE: ${{ matrix.architecture }}
 
     steps:
-      - name: Check out Typing
+      - name: Check out TypingVE
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           path: typing
@@ -54,14 +54,14 @@ jobs:
           rustup default stable
           if ($LASTEXITCODE) { throw 'Selecting stable Rust failed' }
           cargo fetch --locked --target x86_64-pc-windows-msvc
-          if ($LASTEXITCODE) { throw 'Typing dependency provisioning failed' }
+          if ($LASTEXITCODE) { throw 'TypingVE dependency provisioning failed' }
           cargo fetch --manifest-path ../inputsim/Cargo.toml --locked --target x86_64-pc-windows-msvc
           if ($LASTEXITCODE) { throw 'InputSim dependency provisioning failed' }
           if ($env:TYPING_ARCHITECTURE -eq 'x86') {
             rustup toolchain install nightly-2026-04-15 --profile minimal --component rust-src --component clippy
             if ($LASTEXITCODE) { throw 'Windows 7 toolchain provisioning failed' }
             cargo +nightly-2026-04-15 fetch --locked --target i686-win7-windows-msvc
-            if ($LASTEXITCODE) { throw 'Typing x86 dependency provisioning failed' }
+            if ($LASTEXITCODE) { throw 'TypingVE x86 dependency provisioning failed' }
             cargo +nightly-2026-04-15 fetch --manifest-path ../inputsim/Cargo.toml --locked --target i686-win7-windows-msvc
             if ($LASTEXITCODE) { throw 'InputSim x86 dependency provisioning failed' }
             $sysroot = (& rustc +nightly-2026-04-15 --print sysroot).Trim()
@@ -71,7 +71,7 @@ jobs:
             if ($LASTEXITCODE) { throw 'Standard library dependency provisioning failed' }
           }
 
-      - name: Check Typing source and compile native test tools
+      - name: Check TypingVE source and compile native test tools
         run: ./tools/validate_windows.ps1 -BuildOnly -Architecture $env:TYPING_ARCHITECTURE
 
       - name: Test and lint InputSim
@@ -117,7 +117,7 @@ jobs:
             scope = 'Source tests, native tool compilation, package and binary integrity. Desktop and target OS checks are separate.'
           } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath target/dist/build-environment.json -Encoding utf8
           git diff --exit-code
-          if ($LASTEXITCODE) { throw 'Checks changed tracked Typing files' }
+          if ($LASTEXITCODE) { throw 'Checks changed tracked TypingVE files' }
           git -C ../inputsim diff --exit-code
           if ($LASTEXITCODE) { throw 'Checks changed tracked InputSim files' }
 
@@ -128,6 +128,6 @@ jobs:
           if-no-files-found: error
           retention-days: 14
           path: |
-            typing/target/dist/Typing-*-win-${{ matrix.architecture }}.zip
-            typing/target/dist/Typing-*-win-${{ matrix.architecture }}.manifest.json
+            typing/target/dist/TypingVE-*-win-${{ matrix.architecture }}.zip
+            typing/target/dist/TypingVE-*-win-${{ matrix.architecture }}.manifest.json
             typing/target/dist/build-environment.json

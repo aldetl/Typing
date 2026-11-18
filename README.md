@@ -1,6 +1,6 @@
-# Typing
+# TypingVE
 
-Typing is an efficient tool that keeps your hands on the keyboard. It greatly reduces the frequency of switching between the keyboard and mouse while you type. You can use Vim-style command mode or Emacs-style direct shortcuts to move the caret, select text, and run custom commands across applications—without requiring plugins or integration from those applications.
+TypingVE is an efficient tool that keeps your hands on the keyboard. It greatly reduces the frequency of switching between the keyboard and mouse while you type. You can use Vim-style command mode or Emacs-style direct shortcuts to move the caret, select text, and run custom commands across applications—without requiring plugins or integration from those applications.
 
 ## Move the cursor without leaving the letter keys.
 
@@ -30,20 +30,20 @@ Emacs-style shortcuts combine a modifier with a letter, so movement works withou
 
 ## Get started
 
-Extract the complete portable package into a folder. Keep `Typing.exe`, `inputsim.dll`, `configuration.ini`, and the `profiles/` and `languages/` folders together, and quit any other Typing or Aldetl instance using the same global shortcut.
+Extract the complete portable package into a folder. Keep `TypingVE.exe`, `inputsim.dll`, `configuration.ini`, and the `profiles/` and `languages/` folders together, and quit any other TypingVE or Aldetl instance using the same global shortcut.
 
-1. Run `Typing.exe`. It starts enabled in the Windows notification area (the tray).
+1. Run `TypingVE.exe`. It starts enabled in the Windows notification area (the tray).
 2. Open a text editor. With the default profile, tap and release **Caps Lock** or **Left Alt** alone to enter command mode.
 3. Press **I / J / K / L** to move up / left / down / right. Hold a mode key with a configured shortcut, such as **Caps Lock+J**, to move directly without entering command mode first.
 4. Tap a mode key again, or press **G**, to resume ordinary typing. Command mode also exits after inactivity by default.
 
-Use **Ctrl+U** to enable or disable Typing. Choose **Show Window** from the tray to open the mapping editor, event diagnostics, settings, and help. Closing the window hides it; choose tray **Exit** to quit.
+Use **Ctrl+U** to enable or disable TypingVE. Choose **Show Window** from the tray to open the mapping editor, event diagnostics, settings, and help. Closing the window hides it; choose tray **Exit** to quit.
 
 In **Mapping Profile**, **Save** writes a profile and **Set as active** applies it. **Import** brings in supported profiles or legacy configuration mappings without changing the source file. Review imported mappings before activating them. See the [user guide](docs/USER_GUIDE.md) for the full command list, profile management, preferences, and troubleshooting.
 
 ## Development
 
-Typing is designed for Windows, macOS, and Linux. Windows is currently the only released platform; macOS and Linux support is under development.
+TypingVE is designed for Windows, macOS, and Linux. Windows is currently the only released platform; macOS and Linux support is under development.
 
 ### Windows architectures
 
@@ -58,7 +58,7 @@ Development verification runs on Windows 11 x64. Actual Windows 7 SP1/Windows 10
 
 The Rust workspace separates command interpretation (`typing-core`), shared host coordination and profiles (`typing-host`), and native Windows integration (`typing-windows`). The separately maintained [InputSim](https://github.com/aldetl/InputSim) DLL supplies input simulation.
 
-Use an x64 MSVC Rust host toolchain, Visual Studio or Build Tools with C++ tools for the selected architecture, and a Windows SDK. From the Typing repository root, prepare the adjacent InputSim checkout and locked dependencies, then build an x64 portable package:
+Use an x64 MSVC Rust host toolchain, Visual Studio or Build Tools with C++ tools for the selected architecture, and a Windows SDK. From the TypingVE repository root, prepare the adjacent InputSim checkout and locked dependencies, then build an x64 portable package:
 
 ```powershell
 git clone https://github.com/aldetl/InputSim.git ../inputsim
@@ -71,6 +71,32 @@ cargo fetch --manifest-path ../inputsim/Cargo.toml --locked --target x86_64-pc-w
 The packaging script builds both projects with locked, offline dependencies and writes the package and integrity manifest under `target/dist/`. The application and DLL must have matching architectures.
 
 For Windows x86 with Windows 7 compatibility, use `nightly-2026-04-15`, `rust-src`, and the `i686-win7-windows-msvc` target with a rebuilt standard library. Provision that toolchain and its locked dependencies before running `.\tools\package_windows.ps1 -Architecture x86`.
+
+### Microsoft Store MSIX
+
+The x64 MSIX uses the same executable with package-local storage, opt-in Windows startup tasks, and one primary instance per user/package family. Explicit launch opens its window; sign-in startup stays hidden. The portable ZIP retains its existing paths, options, hidden launch, and startup registration.
+
+The Microsoft Store app name is **TypingVE**, with the release-owner-supplied package identity **Aldetl.TypingVE**. The identity example supplies this display name while leaving identity confirmation disabled; the publisher and other identity values must still match the intended Partner Center product.
+
+Use the build prerequisites above and a Windows SDK containing MakeAppx. For a new configuration, copy `packaging/microsoft-store/identity.example.json` into `target/typing-store-identity.json`; preserve an existing configured file. Fill TypingVE's exact **Product identity** values from its reserved Partner Center product, supply the Windows version actually tested as `MaxVersionTested`, and set `ProductIdentityConfirmed` to `true`. NoteRecall's product identity cannot be reused. Without a confirmed product identity, only a separately identified development package can be produced.
+
+```powershell
+.\tools\package_store.ps1 -IdentityFile target/typing-store-identity.json -OutputRoot target/dist/store-typingve
+.\tools\validate_store.ps1 -Report target/dist/store-typingve/TypingVE-1.5.1-store-x64.manifest.json
+```
+
+Replace the example version with the current Cargo version. Packaging builds offline, inspects matching static-runtime binaries, validates the manifest/assets, creates an unsigned MSIX, verifies extraction hashes, and records source/build inputs and outstanding checks. Existing candidates are preserved; use `-OutputRoot target/dist/<new-directory>` for another candidate. The script does not sign, install, or publish.
+
+For local testing, supply an explicit development identity ending in `.Development`, an independent publisher/display name, the host Windows version, and `ProductIdentityConfirmed: false`. Use `-Development`; artifacts go to `target/dist/store-development` and are marked unsuitable for Store submission. `-StageOnly` creates only the development layout and its inventory. On an interactive English Windows desktop with Developer Mode already enabled and other TypingVE copies closed:
+
+```powershell
+.\tools\package_store.ps1 -IdentityFile target/typing-development-identity.json -Development
+.\tools\validate_store.ps1 -Report target/dist/store-development/TypingVE-1.5.1-development-x64.manifest.json -DevelopmentRuntime
+```
+
+Runtime validation refuses an existing development identity or its data, registers only the isolated test layout, checks activation/startup/data/native UI, and unregisters it afterward. `-Inspect` holds the final window for visual review; close it to finish. Native checks require the test window in the foreground. The runtime evidence is written beside the candidate report. A development registration is not a signed installation, upgrade, clean-machine, accessibility, or certification result.
+
+Before submission, complete the design's installed-candidate, clean Windows 10/11, accessibility, upgrade, and Windows App Certification Kit checks. Prepare both language listings, screenshots, privacy/support URLs, and the `runFullTrust` justification. The release owner uploads the exact inventoried unsigned MSIX in TypingVE's Partner Center product, reviews submission/publication settings, addresses certification, and verifies the actual Store installation. This implementation does not submit or publish the app.
 
 ### Validation
 
@@ -88,9 +114,9 @@ Make changes on a work branch and open a pull request. After the required checks
 
 ## License
 
-Typing is source-available under [Apache License 2.0 with Commons Clause 1.0](LICENSE). Personal and workplace use are permitted under those terms; the Commons Clause restriction on selling applies.
+TypingVE is source-available under [Apache License 2.0 with Commons Clause 1.0](LICENSE). Personal and workplace use are permitted under those terms; the Commons Clause restriction on selling applies.
 
-Unofficial distributions must include [NOTICE](NOTICE) or identify **Typing** and link to its [official repository](https://github.com/aldetl/Typing) in About. This attribution also permits reuse of the Typing icons; no separate permission request is needed.
+Unofficial distributions must include [NOTICE](NOTICE) or identify the original **Typing** project and link to its [official repository](https://github.com/aldetl/Typing) in About, as specified in LICENSE. This attribution also permits reuse of the project's icons; no separate permission request is needed.
 
 InputSim is independently licensed under Apache 2.0 alone. Other dependencies retain their own terms; see [third-party notices](THIRD_PARTY_NOTICES.md).
 

@@ -6,10 +6,10 @@ const WEBSITE: &str = "https://xdetail.org/typing";
 const GITHUB: &str = "https://github.com/aldetl/Typing";
 
 pub fn show(owner: HWND) {
-    let title = wide(&msg!("ui.about_typing", "About Typing"));
+    let title = wide(&msg!("ui.about_typing", "About TypingVE"));
     let message = msg!(
         "main.typing_fast_vim_and_emacs_cursor",
-        "Typing {arg0}\r\nFast vim and emacs cursor moving and convenient key mapping\r\n\r\nWebsite: https://xdetail.org/typing\r\nGitHub: https://github.com/aldetl/Typing",
+        "TypingVE {arg0}\r\nFast vim and emacs cursor moving and convenient key mapping\r\n\r\nWebsite: https://xdetail.org/typing\r\nGitHub: https://github.com/aldetl/Typing",
         arg0 = env!("CARGO_PKG_VERSION")
     );
     // The catalog supplies plain text; only the fixed official URLs become markup.
@@ -114,7 +114,7 @@ unsafe extern "system" fn callback(
                         "Unable to open the link in your default browser."
                     ))
                     .as_ptr(),
-                    wide(&msg!("ui.about_typing", "About Typing")).as_ptr(),
+                    wide(&msg!("ui.about_typing", "About TypingVE")).as_ptr(),
                     MB_OK | MB_ICONERROR,
                 )
             };

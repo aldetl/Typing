@@ -1,0 +1,55 @@
+TypingVE Privacy Policy
+Last updated: November 18, 2026
+
+Scope
+
+This policy describes the Windows desktop application TypingVE, published by Aldetl, including its Microsoft Store and portable editions.
+
+TypingVE processes keyboard events on your computer. It does not automatically send keyboard events, mapping profiles or diagnostic logs to Aldetl or a remote service.
+
+Keyboard processing
+
+TypingVE processes key identities, key press/release states and modifier states to provide configured key mappings, command-mode navigation and shortcut output. This processing can occur while you use other applications.
+
+The Event diagnostics page can display recent keyboard events while that page is in the foreground and its display option is enabled. These events are held in memory and are not written to diagnostic log files. The Clear control removes displayed and pending events. Exiting TypingVE discards its in-memory event history.
+
+Mapping recorder dialogs process the keys you enter to define mappings. Profiles contain the mapping definitions you choose to save.
+
+Local files and diagnostic logs
+
+TypingVE stores configuration, mapping profiles, language preferences, window size and troubleshooting logs locally. You may select additional file locations when importing or saving profiles.
+
+The Microsoft Store edition uses a package-specific LocalCache\typing folder under your Windows user account. The portable edition keeps configuration and profiles beside its executable by default, with preferences and logs in the existing per-user Typing folder under LocalAppData. Documented fallback paths and command-line overrides may apply to the portable edition.
+
+Troubleshooting logs contain startup, lifecycle, profile names, file paths and error information. Normal logs do not contain raw keystrokes, typed text, clipboard contents or document contents. Logs rotate automatically, retaining one current file and up to three archives, each limited to 1 MiB.
+
+File paths and profile names may contain identifying information, such as a Windows account name. Review logs and profiles before sharing them.
+
+Network services and external links
+
+TypingVE has no app accounts, advertising or analytics. It does not automatically upload profiles, diagnostic logs or keyboard events.
+
+Opening a website or GitHub link from About launches your default browser. Those websites operate under their own privacy practices. Other applications receiving keyboard input also operate under their own data practices.
+
+Microsoft Store and Windows services operate under Microsoft's terms and privacy policies.
+
+Your controls and data retention
+
+The tray Disable control turns off TypingVE's key mappings. Use Exit to stop TypingVE and its keyboard processing. Closing the main window hides it in the system tray and does not exit the application.
+
+You can clear displayed diagnostic events, edit or delete your profile files, and remove local preferences and logs while TypingVE is closed.
+
+Copy important configuration and profiles outside package app data before uninstalling or resetting the Microsoft Store edition. Windows excludes LocalCache from app-data backup and restore. Uninstalling or resetting the app can remove its package-owned data.
+
+Support
+
+If you contact support, we receive your email address and the information you choose to send so that we can respond. Support messages are delivered through email services.
+
+Do not send passwords or other sensitive information. Sharing logs or profiles is your choice; TypingVE does not send them automatically.
+
+Contact: support@xdetail.org
+Publisher: Aldetl
+
+Policy updates
+
+Changes to TypingVE's data handling will be reflected in an updated policy. The date above identifies the latest revision.

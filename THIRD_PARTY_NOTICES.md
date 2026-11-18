@@ -14,7 +14,7 @@ InputSim is built from a separate checkout and is not vendored into the Typing s
 
 ## Windows Rust bindings and import libraries
 
-The locked Windows dependency graph uses `windows-sys` 0.52.0, `windows-targets` 0.52.5, and target-specific Windows import libraries. These components come from [microsoft/windows-rs](https://github.com/microsoft/windows-rs) and are licensed under MIT OR Apache-2.0.
+The locked Windows dependency graph uses `windows-sys` 0.52.0, `windows-targets` 0.52.5, and target-specific Windows import libraries. The x64 build also uses `windows` and `windows-core` 0.52.0 for packaged Windows Runtime integration. These components come from [microsoft/windows-rs](https://github.com/microsoft/windows-rs) and are licensed under MIT OR Apache-2.0.
 
 The source lockfile records the resolved packages and checksums. Package production must retain the license notices from the actual components used for the selected target. The shared texts included here are [licenses/windows-rs-LICENSE-APACHE.txt](licenses/windows-rs-LICENSE-APACHE.txt) and [licenses/windows-rs-LICENSE-MIT.txt](licenses/windows-rs-LICENSE-MIT.txt); component-specific notices remain applicable.
 

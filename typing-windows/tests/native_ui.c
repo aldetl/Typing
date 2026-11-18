@@ -54,7 +54,7 @@ static int visible(int expected) {
 }
 static BOOL CALLBACK find_about(HWND window,LPARAM output) {
     DWORD pid=0;wchar_t title[128];GetWindowThreadProcessId(window,&pid);GetWindowTextW(window,title,128);
-    if(pid==client_pid&&wcscmp(title,L"About Typing")==0)*(HWND*)output=window;
+    if(pid==client_pid&&wcscmp(title,L"About TypingVE")==0)*(HWND*)output=window;
     return TRUE;
 }
 static HWND wait_about(void) {
@@ -64,7 +64,7 @@ static HWND wait_about(void) {
 }
 static BOOL CALLBACK find_guide(HWND window,LPARAM output) {
     DWORD pid=0;wchar_t title[128];GetWindowThreadProcessId(window,&pid);GetWindowTextW(window,title,128);
-    if(pid==client_pid&&wcscmp(title,L"Typing User Guide")==0)*(HWND*)output=window;
+    if(pid==client_pid&&wcscmp(title,L"TypingVE User Guide")==0)*(HWND*)output=window;
     return TRUE;
 }
 static HWND wait_guide(void) {
@@ -185,7 +185,7 @@ cleanup:
 int wmain(int argc,wchar_t **argv) {
     STARTUPINFOW startup={0};PROCESS_INFORMATION started={0};wchar_t command[8192];
     HWND about,guide,open_guide,introduction,dialog=NULL;RECT rect={0},outer;DWORD exit_code=99;
-    int inspect=0;
+    int inspect=0,store=0;
     SetProcessDpiAwarenessContext(DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2);
     if(argc==3&&wcscmp(argv[1],L"--show")==0) {
         client_pid=wcstoul(argv[2],NULL,10);EnumWindows(find_client,0);
@@ -195,8 +195,9 @@ int wmain(int argc,wchar_t **argv) {
         if(!process)return 2;EnumWindows(find_client,0);
         if(!client||!PostMessageW(client,WM_COMMAND,1003,0)||WaitForSingleObject(process,5000)!=WAIT_OBJECT_0){CloseHandle(process);return 1;}
         {DWORD code=99;GetExitCodeProcess(process,&code);CloseHandle(process);return code==0?0:1;}
-    } else if(argc==4&&wcscmp(argv[1],L"--attach")==0) {
-        client_pid=wcstoul(argv[2],NULL,10);process=OpenProcess(SYNCHRONIZE|PROCESS_QUERY_LIMITED_INFORMATION,FALSE,client_pid);
+    } else if(argc==4&&(wcscmp(argv[1],L"--attach")==0||wcscmp(argv[1],L"--attach-store")==0)) {
+        store=wcscmp(argv[1],L"--attach-store")==0;
+        client_pid=wcstoul(argv[2],NULL,10);process=OpenProcess(SYNCHRONIZE|PROCESS_QUERY_LIMITED_INFORMATION|PROCESS_VM_OPERATION|PROCESS_VM_READ|PROCESS_VM_WRITE,FALSE,client_pid);
         inspect=wcscmp(argv[3],L"inspect")==0;
     } else if(argc==6) {
         startup.cb=sizeof(startup);
@@ -205,9 +206,11 @@ int wmain(int argc,wchar_t **argv) {
         if(!CreateProcessW(argv[1],command,NULL,NULL,FALSE,CREATE_NO_WINDOW,NULL,NULL,&startup,&started))return 2;
         process=started.hProcess;client_pid=started.dwProcessId;inspect=wcscmp(argv[5],L"inspect")==0;
     } else {fwprintf(stderr,L"Usage: native_ui HOST DLL CONFIG LOG inspect|test\n       native_ui --attach PID inspect|test\n");return 2;}
-    CHECK(process!=NULL);CHECK(status(L"Enabled"));CHECK(!IsWindowVisible(client));
+    CHECK(process!=NULL);CHECK(status(L"Enabled"));CHECK(IsWindowVisible(client)==store);
     CHECK(GetDpiForWindow(client)>0);
-    puts("PASS UI hidden startup and native window");fflush(stdout);
+    CHECK(AreDpiAwarenessContextsEqual(GetWindowDpiAwarenessContext(client),DPI_AWARENESS_CONTEXT_PER_MONITOR_AWARE_V2));
+    puts("PASS native window uses PerMonitorV2 DPI awareness");fflush(stdout);
+    puts(store?"PASS Store explicit visible launch and native window":"PASS UI hidden startup and native window");fflush(stdout);
     CHECK(PostMessageW(client,WM_COMMAND,1004,0));CHECK(visible(1));
     CHECK(GetClientRect(client,&rect));CHECK(rect.right>=300&&rect.bottom>=200);
     CHECK(GetDlgItem(client,2000)!=NULL);CHECK(SendMessageW(GetDlgItem(client,2000),TCM_GETITEMCOUNT,0,0)==4);
@@ -248,7 +251,7 @@ int wmain(int argc,wchar_t **argv) {
         CHECK(FindWindowExW(settings,NULL,L"STATIC",NULL)==GetDlgItem(settings,2021));
         CHECK((GetWindowLongW(GetDlgItem(settings,2020),GWL_STYLE)&(CBS_DROPDOWNLIST|WS_TABSTOP))==(CBS_DROPDOWNLIST|WS_TABSTOP));
         CHECK(GetWindowTextW(explanation,content,ARRAYSIZE(content))>0);
-        CHECK(wcsstr(content,L"system tray")&&wcsstr(content,L"new location"));
+        CHECK(wcsstr(content,L"system tray")&&(store?wcsstr(content,L"Windows Settings"):wcsstr(content,L"new location")));
         CHECK((GetWindowLongW(explanation,GWL_STYLE)&(ES_READONLY|ES_MULTILINE))==(ES_READONLY|ES_MULTILINE));
         CHECK(GetWindowRect(client,&original)&&GetWindowRect(explanation,&wide)&&block_fits(explanation));
         CHECK(SetWindowPos(client,NULL,0,0,MulDiv(360,(int)GetDpiForWindow(client),96),original.bottom-original.top,SWP_NOMOVE|SWP_NOZORDER));
@@ -291,7 +294,7 @@ int wmain(int argc,wchar_t **argv) {
         for(unsigned step=0;step<20;step++)SendMessageW(picture,WM_MOUSEWHEEL,(WPARAM)0x00780000,0);}
     puts("PASS Help picture proportional narrow resizing, label wrapping, and button scroll reachability");fflush(stdout);
     if(GetForegroundWindow()!=client){ULONGLONG until=GetTickCount64()+60000;
-        puts("Activate the Typing test window to verify its modal dialogs.");fflush(stdout);
+        puts("Activate the TypingVE test window to verify its modal dialogs.");fflush(stdout);
         while(GetForegroundWindow()!=client&&GetTickCount64()<until)pump(20);
         CHECK(GetForegroundWindow()==client);}
     PostMessageW(open_guide,BM_CLICK,0,0);dialog=wait_guide();CHECK(dialog!=NULL);
@@ -300,7 +303,7 @@ int wmain(int argc,wchar_t **argv) {
     guide=GetDlgItem(dialog,2011);CHECK(guide&&GetDlgItem(dialog,2));
     CHECK((GetWindowLongW(guide,GWL_STYLE)&ES_READONLY)!=0);
     {int length=(int)SendMessageW(guide,WM_GETTEXTLENGTH,0,0);wchar_t *content=calloc((size_t)length+1,sizeof(wchar_t));CHECK(content&&length>1000);
-        SendMessageW(guide,WM_GETTEXT,(WPARAM)length+1,(LPARAM)content);int formatted=wcsstr(content,L"Typing User Guide")&&wcsstr(content,L"Get started")&&!wcsstr(content,L"# Typing User Guide")&&!wcsstr(content,L"**Ctrl+U**");free(content);CHECK(formatted);}
+        SendMessageW(guide,WM_GETTEXT,(WPARAM)length+1,(LPARAM)content);int formatted=wcsstr(content,L"TypingVE User Guide")&&wcsstr(content,L"Get started")&&!wcsstr(content,L"# TypingVE User Guide")&&!wcsstr(content,L"**Ctrl+U**");free(content);CHECK(formatted);}
     {CHARFORMATW format={0};SIZE_T copied=0;format.cbSize=sizeof(format);void *remote=VirtualAllocEx(process,NULL,sizeof(format),MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);CHECK(remote);
         CHARRANGE selected={0,1};int ok=WriteProcessMemory(process,remote,&selected,sizeof(selected),&copied)&&copied==sizeof(selected);
         if(ok)SendMessageW(guide,EM_EXSETSEL,0,(LPARAM)remote);
@@ -364,7 +367,7 @@ int wmain(int argc,wchar_t **argv) {
         puts("PASS simulated 100/125/150/200% DPI layout keeps native button text within bounds");
     }
     PostMessageW(client,WM_COMMAND,1002,0);CHECK(status(L"Disabled"));
-    SetWindowTextW(client,L"Typing - Transition requested");
+    SetWindowTextW(client,L"TypingVE - Transition requested");
     PostMessageW(client,WM_COMMAND,1001,0);PostMessageW(client,WM_COMMAND,1002,0);
     PostMessageW(client,WM_COMMAND,1001,0);CHECK(status(L"Enabled"));
     PostMessageW(client,WM_COMMAND,1002,0);CHECK(status(L"Disabled"));
@@ -398,7 +401,7 @@ int wmain(int argc,wchar_t **argv) {
     PostMessageW(client,WM_CLOSE,0,0);CHECK(visible(0));CHECK(WaitForSingleObject(process,0)==WAIT_TIMEOUT);
     PostMessageW(client,WM_COMMAND,1004,0);CHECK(visible(1));
     puts("PASS UI About dialog and close-to-tray/show lifetime");fflush(stdout);
-    if(inspect){puts("Inspect Typing UI; close its main window to finish this test.");fflush(stdout);
+    if(inspect){puts("Inspect TypingVE UI; close its main window to finish this test.");fflush(stdout);
         for(unsigned i=0;i<18000&&IsWindowVisible(client)&&WaitForSingleObject(process,0)==WAIT_TIMEOUT;i++)pump(50);
     }
 cleanup:

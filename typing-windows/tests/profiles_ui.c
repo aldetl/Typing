@@ -45,7 +45,7 @@ static int check_paths(void) {
     if(!absolute_windows_path(L"./target/Profile Test/old/../example.typing.ini",result,ARRAYSIZE(result))||wcscmp(result,expected)!=0) {
         fputs("FAIL caller-relative profile test path normalization\n",stderr);return 1;
     }
-    if(absolute_windows_path(L"C:/Typing Test",result,4)||GetLastError()!=ERROR_FILENAME_EXCED_RANGE||
+    if(absolute_windows_path(L"C:/TypingVE Test",result,4)||GetLastError()!=ERROR_FILENAME_EXCED_RANGE||
         absolute_windows_path(L"",result,ARRAYSIZE(result))||GetLastError()!=ERROR_INVALID_NAME) {
         fputs("FAIL invalid or oversized profile test path rejection\n",stderr);return 1;
     }
@@ -257,8 +257,8 @@ int wmain(int argc,wchar_t **argv) {
         fwprintf(stderr,L"Cannot resolve profile test paths (error %lu)\n",GetLastError());return 2;
     }
     {WNDCLASSW cls={0};cls.lpfnWndProc=DefWindowProcW;cls.hInstance=GetModuleHandleW(NULL);cls.lpszClassName=L"TypingProfileTestController";RegisterClassW(&cls);
-        controller=CreateWindowW(cls.lpszClassName,L"Typing profile test controller",WS_OVERLAPPEDWINDOW|WS_VISIBLE,100,100,600,160,NULL,NULL,cls.hInstance,NULL);
-        CHECK(controller);SetForegroundWindow(controller);puts("INFO activate Typing profile test controller to begin the isolated native test");fflush(stdout);
+        controller=CreateWindowW(cls.lpszClassName,L"TypingVE profile test controller",WS_OVERLAPPEDWINDOW|WS_VISIBLE,100,100,600,160,NULL,NULL,cls.hInstance,NULL);
+        CHECK(controller);SetForegroundWindow(controller);puts("INFO activate TypingVE profile test controller to begin the isolated native test");fflush(stdout);
         ULONGLONG until=GetTickCount64()+60000;while(GetForegroundWindow()!=controller&&GetTickCount64()<until)pump(20);CHECK(GetForegroundWindow()==controller);
     }
     CreateDirectoryW(test_directory,NULL);
@@ -269,7 +269,7 @@ int wmain(int argc,wchar_t **argv) {
     swprintf_s(clone,4096,L"%s\\profile-Clone.typing.ini",root);swprintf_s(empty,4096,L"%s\\profile-Empty.typing.ini",root);
     swprintf_s(imported,4096,L"%s\\profile-Imported.typing.ini",root);swprintf_s(legacy_copy,4096,L"%s\\profile-Legacy copy.typing.ini",root);
     swprintf_s(legacy,4096,L"%s\\legacy.ini",test_directory);swprintf_s(invalid,4096,L"%s\\invalid.typing.ini",test_directory);
-    swprintf_s(host,4096,L"%s\\Typing.exe",test_directory);CHECK(CopyFileW(application,host,TRUE));
+    swprintf_s(host,4096,L"%s\\TypingVE.exe",test_directory);CHECK(CopyFileW(application,host,TRUE));
     swprintf_s(log,4096,L"%s\\host.log",test_directory);swprintf_s(backup,4096,L"%s.bak",profile);
     CHECK(write_file(config,"; application settings stay independent\r\n[common]\r\nhotkey=Control+Shift+F11\r\nmode_auto_exit=off\r\n[profiles]\r\nactive=profiles/layout.typing.ini\r\n"));
     CHECK(write_file(profile,"[profile]\r\nversion=1\r\nname=First\r\n[modekeys]\r\n; keep this movement comment\r\nCapsLock=mode\r\nJ=Left\r\n[hotkeys]\r\nJ=Left\r\n"));
@@ -284,6 +284,10 @@ int wmain(int argc,wchar_t **argv) {
     CHECK(CreateProcessW(host,command_line,NULL,NULL,FALSE,CREATE_NO_WINDOW,NULL,test_directory,&startup,&child));
     process=child.hProcess;pid=child.dwProcessId;client=wait_window(L"TypingWindowsClient");CHECK(client);CHECK(wait_text(client,L"Enabled"));AllowSetForegroundWindow(pid);
     command(client,1004);binding_page=page();CHECK(binding_page);list=FindWindowExW(binding_page,NULL,L"SysListView32",NULL);CHECK(list);
+    /* Show is posted asynchronously; wait for the page presentation before
+       asserting it, independently of controller/client scheduling. */
+    {ULONGLONG until=GetTickCount64()+5000;
+        while(!IsWindowVisible(binding_page)&&GetTickCount64()<until)pump(10);}
     CHECK(SendMessageW(GetDlgItem(client,2000),TCM_GETCURSEL,0,0)==0&&IsWindowVisible(binding_page));
     CHECK(wait_text(binding_page,L"Active: First"));CHECK(SendMessageW(GetDlgItem(binding_page,3001),CB_GETCOUNT,0,0)==2);
     CHECK(has_profile(L"First")&&has_profile(L"Other")&&!has_profile(L"Outside")&&!has_profile(L"Nested"));

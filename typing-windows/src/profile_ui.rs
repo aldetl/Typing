@@ -57,7 +57,7 @@ fn alert(window: HWND, message: &(impl MessageValue + ?Sized)) {
         MessageBoxW(
             window,
             wide(message).as_ptr(),
-            wide(&msg!("ui.typing_profiles", "Typing profiles")).as_ptr(),
+            wide(&msg!("ui.typing_profiles", "TypingVE profiles")).as_ptr(),
             MB_OK | MB_ICONERROR,
         );
     }
@@ -67,7 +67,7 @@ fn ask(window: HWND, message: &(impl MessageValue + ?Sized), style: u32) -> i32 
         MessageBoxW(
             window,
             wide(message).as_ptr(),
-            wide(&msg!("ui.typing_profiles", "Typing profiles")).as_ptr(),
+            wide(&msg!("ui.typing_profiles", "TypingVE profiles")).as_ptr(),
             style,
         )
     }
@@ -401,7 +401,7 @@ fn file_dialog(owner: HWND, save: bool, legacy: bool) -> Result<Option<PathBuf>,
     } else {
         vec![
             (
-                msg!("ui.typing_profiles", "Typing profiles"),
+                msg!("ui.typing_profiles", "TypingVE profiles"),
                 "*.typing.ini",
             ),
             (msg!("filters.ini", "INI files"), "*.ini"),
@@ -599,11 +599,15 @@ pub fn initialize(owner: HWND, page: HWND) -> Result<Vec<HWND>, Message> {
         status,
         selector,
         library: Library {
-            directory: std::env::current_exe()
-                .map_err(|e| e.to_string())?
-                .parent()
-                .unwrap()
-                .join("profiles"),
+            directory: distribution::context()
+                .ok_or_else(|| {
+                    msg!(
+                        "store.context_missing",
+                        "Windows distribution context is unavailable."
+                    )
+                })?
+                .profiles
+                .clone(),
         },
         available: Vec::new(),
         discovery_errors: Vec::new(),

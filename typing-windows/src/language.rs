@@ -9,12 +9,10 @@ pub struct Windows {
     preference: Option<PathBuf>,
 }
 impl Windows {
-    fn new(directory: PathBuf) -> Self {
+    fn new(directory: PathBuf, preference: Option<PathBuf>) -> Self {
         Self {
             directory,
-            preference: std::env::var_os("LOCALAPPDATA")
-                .filter(|p| !p.is_empty())
-                .map(|p| PathBuf::from(p).join("Typing/language.txt")),
+            preference,
         }
     }
 }
@@ -127,8 +125,8 @@ thread_local! {
     #[cfg_attr(target_vendor = "win7", allow(clippy::missing_const_for_thread_local))]
     static ROOT: std::cell::Cell<HWND> = const { std::cell::Cell::new(0) };
 }
-pub fn initialize(directory: PathBuf) {
-    let platform = Windows::new(directory.join("languages"));
+pub fn initialize(directory: PathBuf, preference: Option<PathBuf>) {
+    let platform = Windows::new(directory.join("languages"), preference);
     let service = Service::initialize(&platform);
     STATE.with(|cell| *cell.borrow_mut() = Some(State { platform, service }));
 }

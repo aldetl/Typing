@@ -1,12 +1,20 @@
-# Typing User Guide
+# TypingVE User Guide
 
-Typing lets you navigate and edit in the foreground application using configurable keyboard commands. Turn on command mode to use single-key commands, or hold a configured modifier to use a shortcut. The active profile determines which keys do what.
+TypingVE lets you navigate and edit in the foreground application using configurable keyboard commands. Turn on command mode to use single-key commands, or hold a configured modifier to use a shortcut. The active profile determines which keys do what.
 
 ## Get started
 
-1. Extract the portable ZIP into a folder. Keep `Typing.exe`, `inputsim.dll`, `configuration.ini`, and the `profiles` and `languages` folders together.
-2. Quit any older Typing or Aldetl instance using the same global toggle shortcut.
-3. Run `Typing.exe`. Typing starts enabled in the Windows notification area (the tray); its main window stays hidden.
+### Microsoft Store edition
+
+Install TypingVE from Microsoft Store, quit any portable copy, then open TypingVE from Start or the Store. The main window opens on Mapping Profile. Opening it again shows the existing window without restarting keyboard handling. Closing or minimizing hides it in the tray; use tray **Exit** to quit. Sign-in startup stays hidden.
+
+The first launch creates editable defaults in `%LOCALAPPDATA%\Packages\<package-family>\LocalCache\typing\`. Windows assigns the package family. This folder holds `configuration.ini`, `profiles`, `language.txt`, `window-size.txt`, and diagnostic logs. Updates preserve existing data. LocalCache is excluded from Windows app-data backup/restore; copy your configuration and profiles outside package app data before uninstalling or resetting the app. Use **Import** to copy portable mappings. Portable preferences and startup registration are not migrated. Installed resources are read-only; portable command-line path overrides are unavailable.
+
+### Portable edition
+
+1. Extract the portable ZIP into a folder. Keep `TypingVE.exe`, `inputsim.dll`, `configuration.ini`, and the `profiles` and `languages` folders together.
+2. Quit any older TypingVE or Aldetl instance using the same global toggle shortcut.
+3. Run `TypingVE.exe`. TypingVE starts enabled in the Windows notification area (the tray); its main window stays hidden.
 4. Open a text editor and place the cursor in some text.
 5. With the default profile, tap and release **Caps Lock** or **Left Alt** alone to enter command mode. Press **I**, **J**, **K**, or **L** to move up, left, down, or right.
 6. Tap a mode key again, or press **G**, to leave command mode and resume ordinary typing. Automatic mode exit after inactivity is also enabled by default.
@@ -15,18 +23,18 @@ The examples below use the bundled Default profile. Use **Mapping Profile** to i
 
 ## Enable, disable, and exit
 
-Enabling Typing allows it to recognize your configured commands. Command mode is a separate state: Typing can be enabled while command mode is off.
+Enabling TypingVE allows it to recognize your configured commands. Command mode is a separate state: TypingVE can be enabled while command mode is off.
 
-Use these controls to manage Typing:
+Use these controls to manage TypingVE:
 
 | Control | Action |
 | --- | --- |
-| **Ctrl+U** by default | Toggle Typing enabled or disabled. |
-| Double-click the tray icon | Toggle Typing enabled or disabled. |
+| **Ctrl+U** by default | Toggle TypingVE enabled or disabled. |
+| Double-click the tray icon | Toggle TypingVE enabled or disabled. |
 | Tray **Enable** or **Disable** | One toggle item starts or stops keyboard handling; its label shows the next action. |
 | Tray **Show Window** | Open the main window. |
-| Close or minimize the main window | Hide the window and keep Typing running in the tray. |
-| Tray **Exit** | Quit Typing. |
+| Close or minimize the main window | Hide the window and keep TypingVE running in the tray. |
+| Tray **Exit** | Quit TypingVE. |
 
 The tray menu lists **Show Window**, the **Enable/Disable** toggle, and **Exit**, in that order. Disable finishes output cleanup before stopping recognition. After a cleanup failure, use the tray toggle to retry the lifecycle change.
 
@@ -38,7 +46,7 @@ A **mode key** toggles command mode when you press and release it alone. Holding
 
 The default profile uses Caps Lock as a mode key instead of its original capitalization toggle. To send the original **Caps Lock** key, hold **Caps Lock**, then press **Space** to turn capitalization on or off; this works with command mode either on or off.
 
-Mappings with **Command mode** type run in command mode. Mappings with **Hotkey** type also work with command mode off, while Typing is enabled. Unmatched input passes through to the foreground application.
+Mappings with **Command mode** type run in command mode. Mappings with **Hotkey** type also work with command mode off, while TypingVE is enabled. Unmatched input passes through to the foreground application.
 
 The cursor highlight shows command-mode or Caps Lock feedback when configured. When both apply, it shows two colored half-circles. The tray icon also distinguishes disabled, enabled, and command-mode states.
 
@@ -126,37 +134,39 @@ In version 2, `!J=Left` keeps the mapping disabled; `J=Left` enables it. A line 
 
 ## Change application preferences
 
-In **Settings**, choose **System default**, **English**, or **简体中文** from **Language**. The interface changes immediately, preserving mapping edits and the running mappings. Typing remembers the selection per user in `%LOCALAPPDATA%\Typing\language.txt`. A failed language change preserves the previous selection and displays an error; startup uses English if a saved language profile cannot be loaded.
+The paths and editable translation files described below apply to the portable edition. The Store edition keeps all mutable preferences in its package-local `typing` folder described above, and uses only shipped translations. Its **Start with Windows** checkbox uses Windows' startup task. If Windows has disabled the task, enable it in **Windows Settings > Apps > Startup**; policy-controlled tasks cannot be changed in TypingVE. Opening Settings or updating the app does not enable startup.
 
-Language profiles are UTF-8 `.ini` files in the app's `languages` folder, separate from mapping profiles. Their stable message IDs can be translated without rebuilding Typing. Missing translations use English. The matching `.md` file supplies the full guide; a missing guide uses the English guide. Files are loaded at startup and when choosing a different language. After editing the current language file, switch away and back or restart to reload it. System-language changes take effect on the next launch or after switching away from and back to System default. Language selection does not change keyboard layout, the input method, profile notation, or date/time command output. System-managed dialog buttons and Windows error descriptions may remain in the Windows language.
+In **Settings**, choose **System default**, **English**, or **简体中文** from **Language**. The interface changes immediately, preserving mapping edits and the running mappings. TypingVE remembers the selection per user in `%LOCALAPPDATA%\Typing\language.txt`. A failed language change preserves the previous selection and displays an error; startup uses English if a saved language profile cannot be loaded.
 
-Open **Settings** and check **Start with Windows** to start Typing in the system tray when you sign in. Uncheck it to cancel automatic startup. Changes take effect immediately without Save or Apply, and affect only your Windows user account. The option is off until you enable it. Changing it does not stop the running app or change your mappings.
+Language profiles are UTF-8 `.ini` files in the app's `languages` folder, separate from mapping profiles. Their stable message IDs can be translated without rebuilding TypingVE. Missing translations use English. The matching `.md` file supplies the full guide; a missing guide uses the English guide. Files are loaded at startup and when choosing a different language. After editing the current language file, switch away and back or restart to reload it. System-language changes take effect on the next launch or after switching away from and back to System default. Language selection does not change keyboard layout, the input method, profile notation, or date/time command output. System-managed dialog buttons and Windows error descriptions may remain in the Windows language.
 
-If you move the portable Typing folder, enable the option again from its new location. If a change fails, Settings displays the error and keeps the preceding checkbox state. If the setting cannot be read, reopen Settings to retry. Windows Startup Apps controls or organization policy can separately prevent automatic launch.
+Open **Settings** and check **Start with Windows** to start TypingVE in the system tray when you sign in. Uncheck it to cancel automatic startup. Changes take effect immediately without Save or Apply, and affect only your Windows user account. The option is off until you enable it. Changing it does not stop the running app or change your mappings.
 
-Other application preferences live in `configuration.ini` beside the executable. They include the global enable/disable shortcut, automatic command-mode exit, and cursor feedback. Edit this file and restart Typing to change them.
+If you move the portable TypingVE folder, enable the option again from its new location. If a change fails, Settings displays the error and keeps the preceding checkbox state. If the setting cannot be read, reopen Settings to retry. Windows Startup Apps controls or organization policy can separately prevent automatic launch.
+
+Other application preferences live in `configuration.ini` beside the executable. They include the global enable/disable shortcut, automatic command-mode exit, and cursor feedback. Edit this file and restart TypingVE to change them.
 
 The bundled settings use `hotkey=Control+U`, `mode_auto_exit=on`, and `mode_auto_exit_time=2`. Cursor feedback accepts `mode_cursor_tip=on` or `off`; the older `mode_mouse_tip` name is also supported. If both names appear, `mode_cursor_tip` takes precedence, and both supplied values must be valid.
 
 Successful profile activation remembers the profile under `[profiles] active`. Relative profile paths resolve from the directory containing `configuration.ini`.
 
-Typing stores the remembered window size and diagnostic log under `%LOCALAPPDATA%\Typing`, with user-profile and temporary-directory fallbacks. Diagnostic logging runs automatically in the background for troubleshooting. It preserves history across launches, keeping `typing.log` and up to three archives (`typing.log.1` through `.3`), each limited to 1 MiB. The `.lock` file coordinates access and may remain beside them.
+TypingVE stores the remembered window size and diagnostic log under `%LOCALAPPDATA%\Typing`, with user-profile and temporary-directory fallbacks. Diagnostic logging runs automatically in the background for troubleshooting. It preserves history across launches, keeping `typing.log` and up to three archives (`typing.log.1` through `.3`), each limited to 1 MiB. The `.lock` file coordinates access and may remain beside them.
 
-Logging failures are silently ignored. A busy logger may drop messages, and the last messages may be lost when Typing exits; logging never waits for disk writes before letting the app continue or quit. Normal logs contain lifecycle context and failures, not a record of your typing or every successful command.
+Logging failures are silently ignored. A busy logger may drop messages, and the last messages may be lost when TypingVE exits; logging never waits for disk writes before letting the app continue or quit. Normal logs contain lifecycle context and failures, not a record of your typing or every successful command.
 
 ## Troubleshoot
 
-Check these conditions if Typing does not behave as expected:
+Check these conditions if TypingVE does not behave as expected:
 
 | Symptom | What to check |
 | --- | --- |
 | No main window appears at startup | Look in the Windows notification area and choose **Show Window**. |
-| Command keys type letters | Check that Typing is enabled, enter command mode, and check the active profile. Automatic mode exit may have returned you to ordinary typing. |
+| Command keys type letters | Check that TypingVE is enabled, enter command mode, and check the active profile. Automatic mode exit may have returned you to ordinary typing. |
 | Saved mappings do not take effect | Choose the profile for editing, then use **Set as active** to apply it. Saving alone does not change running mappings. Use Set as active again to retry a failed activation. |
-| Startup reports an invalid application configuration | Correct the file at the reported path, then restart. Typing exits before starting keyboard handling and leaves the file unchanged. |
+| Startup reports an invalid application configuration | Correct the file at the reported path, then restart. TypingVE exits before starting keyboard handling and leaves the file unchanged. |
 | Startup opens profile recovery | Select a valid profile in Mapping Profile, or create and save one, then use Set as active. Commands remain unavailable until recovery succeeds. |
-| The global toggle cannot be registered | Quit another Typing or Aldetl instance using that shortcut, or configure a different shortcut and restart. |
-| Closing the window does not stop Typing | Use **Disable** to stop command recognition or tray **Exit** to quit. |
+| The global toggle cannot be registered | Quit another TypingVE or Aldetl instance using that shortcut, or configure a different shortcut and restart. |
+| Closing the window does not stop TypingVE | Use **Disable** to stop command recognition or tray **Exit** to quit. |
 
 The **Event diagnostics** tab shows keyboard input events. Use **Show keyboard events** to control the display. The keyboard event table fills the available space.
 Use **Clear** beside the checkbox to empty the displayed history without changing keyboard capture or the checkbox.

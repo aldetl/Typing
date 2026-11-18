@@ -178,7 +178,7 @@ pub(super) fn show(owner: HWND) -> Result<(), Message> {
         CreateWindowExW(
             WS_EX_CONTROLPARENT,
             wide("TypingGuideDialog").as_ptr(),
-            wide(&msg!("ui.typing_user_guide", "Typing User Guide")).as_ptr(),
+            wide(&msg!("ui.typing_user_guide", "TypingVE User Guide")).as_ptr(),
             WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN,
             x,
             y,

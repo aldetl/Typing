@@ -13,7 +13,7 @@ static BOOL CALLBACK find(HWND window,LPARAM unused) {
     DWORD pid=0;wchar_t title[128],name[128];(void)unused;
     GetWindowThreadProcessId(window,&pid);if(pid!=target)return TRUE;
     GetWindowTextW(window,title,128);GetClassNameW(window,name,128);
-    if(wcscmp(title,L"Typing startup error")==0)dialog=window;
+    if(wcscmp(title,L"TypingVE startup error")==0)dialog=window;
     if(wcscmp(name,L"TypingWindowsClient")==0)client=window;
     return TRUE;
 }
@@ -34,7 +34,7 @@ static int check(const wchar_t *host,const wchar_t *config,const wchar_t *expect
     if(dialog){
         do {
             details[0]=0;EnumChildWindows(dialog,read_text,0);
-            ok=!client&&wcsstr(details,expected)&&(!configuration_error||(wcsstr(details,config)&&wcsstr(details,L"restart Typing")));
+            ok=!client&&wcsstr(details,expected)&&(!configuration_error||(wcsstr(details,config)&&wcsstr(details,L"restart TypingVE")));
             if(!ok)Sleep(10);
         } while(!ok&&GetTickCount64()<until);
         if(ok) {

@@ -101,7 +101,7 @@ static HWND guide_dialog(void) {
 }
 static BOOL CALLBACK find_startup_error(HWND window,LPARAM result) {
     DWORD pid=0;wchar_t title[128];GetWindowThreadProcessId(window,&pid);
-    if(pid==client_pid&&GetWindowTextW(window,title,ARRAYSIZE(title))&&wcscmp(title,L"Typing \u542f\u52a8\u9519\u8bef")==0&&IsWindowVisible(window)) {
+    if(pid==client_pid&&GetWindowTextW(window,title,ARRAYSIZE(title))&&wcscmp(title,L"TypingVE \u542f\u52a8\u9519\u8bef")==0&&IsWindowVisible(window)) {
         *(HWND*)result=window;return FALSE;
     }
     return TRUE;
@@ -116,7 +116,7 @@ int wmain(int argc,wchar_t **argv) {
     HWND settings=NULL,mappings=NULL,list=NULL,help=NULL,guide=NULL,events=NULL;LRESULT event_count=0;
     if(argc!=5){fputs("usage: language_ui APP DLL FIXTURE_DIRECTORY LANGUAGE_SOURCE_DIRECTORY\n",stderr);return 2;}
     CHECK(CreateDirectoryW(argv[3],NULL)||GetLastError()==ERROR_ALREADY_EXISTS);
-    swprintf_s(application,ARRAYSIZE(application),L"%s\\Typing.exe",argv[3]);CHECK(CopyFileW(argv[1],application,FALSE));
+    swprintf_s(application,ARRAYSIZE(application),L"%s\\TypingVE.exe",argv[3]);CHECK(CopyFileW(argv[1],application,FALSE));
     swprintf_s(dll,ARRAYSIZE(dll),L"%s\\inputsim.dll",argv[3]);CHECK(CopyFileW(argv[2],dll,FALSE));
     swprintf_s(profiles_dir,ARRAYSIZE(profiles_dir),L"%s\\profiles",argv[3]);CHECK(CreateDirectoryW(profiles_dir,NULL));
     swprintf_s(profile,ARRAYSIZE(profile),L"%s\\default.typing.ini",profiles_dir);
@@ -168,7 +168,7 @@ int wmain(int argc,wchar_t **argv) {
         }
     }
     CHECK(tab(3));PostMessageW(client,WM_COMMAND,2012,0);guide=guide_dialog();CHECK(guide);
-    CHECK(wait_text(guide,L"Typing \u7528\u6237\u6307\u5357"));
+    CHECK(wait_text(guide,L"TypingVE \u7528\u6237\u6307\u5357"));
     CHECK(wait_text(FindWindowExW(guide,NULL,L"RICHEDIT50W",NULL),L"\u5f00\u59cb\u4f7f\u7528"));
     PostMessageW(guide,WM_CLOSE,0,0);pump(50);guide=NULL;
     CHECK(tab(2));CHECK(choose(settings,1,L"Settings"));CHECK(selection_is(preference,"en\n"));
@@ -184,7 +184,7 @@ int wmain(int argc,wchar_t **argv) {
     CHECK(choose(settings,2,L"\u8bbe\u7f6e"));
     // Save only the disposable draft, allowing a normal quit without a prompt.
     CHECK(tab(0));SendMessageW(mappings,WM_COMMAND,3002,0);pump(60);CHECK(stop());
-    CHECK(launch(application,argv[3]));CHECK(wait_text(client,L"Typing - "));CHECK(!IsWindowVisible(client));
+    CHECK(launch(application,argv[3]));CHECK(wait_text(client,L"TypingVE - "));CHECK(!IsWindowVisible(client));
     PostMessageW(client,WM_COMMAND,1004,0);pump(80);CHECK(page(L"\u8bbe\u7f6e"));
     CHECK(stop());
     CHECK(DeleteFileW(destination));

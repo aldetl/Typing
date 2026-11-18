@@ -49,8 +49,6 @@ try {
         $originalLanguageValidationAppData = [Environment]::GetEnvironmentVariable('LOCALAPPDATA', 'Process')
         [Environment]::SetEnvironmentVariable('LOCALAPPDATA', $languageValidationAppData, 'Process')
         $languageValidationEnvironmentChanged = $true
-        $application = (Resolve-Path -LiteralPath target/release/Typing.exe).Path
-        $dll = (Resolve-Path -LiteralPath target/inputsim/release/inputsim.dll).Path
         if ($Architecture -eq 'x86' -and -not $Portable) {
             throw 'Use -Portable with -Architecture x86 to verify the matched legacy executable and DLL.'
         }
@@ -58,7 +56,7 @@ try {
             $metadata = cargo metadata --no-deps --format-version 1 --locked --offline | ConvertFrom-Json
             if ($LASTEXITCODE -ne 0) { throw 'Cannot read release version' }
             $version = ($metadata.packages | Where-Object name -eq 'typing-windows').version
-            $release = Get-Content -LiteralPath "target/dist/Typing-$version-win-$Architecture.manifest.json" -Raw | ConvertFrom-Json
+            $release = Get-Content -LiteralPath "target/dist/TypingVE-$version-win-$Architecture.manifest.json" -Raw | ConvertFrom-Json
             if ((Get-FileHash -LiteralPath $release.archive -Algorithm SHA256).Hash -ne $release.archiveSha256) {
                 throw 'Release archive changed after packaging'
             }
@@ -67,8 +65,11 @@ try {
                     throw "Extracted release file changed: $($entry.path)"
                 }
             }
-            $application = Join-Path $release.extractedPackage 'Typing.exe'
+            $application = Join-Path $release.extractedPackage 'TypingVE.exe'
             $dll = Join-Path $release.extractedPackage 'inputsim.dll'
+        } else {
+            $application = (Resolve-Path -LiteralPath target/release/TypingVE.exe).Path
+            $dll = (Resolve-Path -LiteralPath target/inputsim/release/inputsim.dll).Path
         }
         $configuration = (Resolve-Path -LiteralPath target/integration.ini).Path
         & (Join-Path $testTools 'startup_errors.exe') $application (Join-Path $projectRoot 'target') | Tee-Object -FilePath "target/startup-errors-$Architecture-live.log"
@@ -83,7 +84,7 @@ try {
                 Get-ChildItem -LiteralPath target -Filter 'integration-*.log' |
                     Where-Object { $_.Name -ne 'integration-build.log' -and $_.Name -ne 'integration-validation.log' } |
                     ForEach-Object { Get-Content -LiteralPath $_.FullName | Select-Object -Last 8 }
-                throw 'Typing live integration failed'
+                throw 'TypingVE live integration failed'
             }
         } finally {
             $env:TYPING_TEST_INPUTSIM = $oldProxyPath
