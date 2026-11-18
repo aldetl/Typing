@@ -79,7 +79,7 @@ static HWND wait_guide(void) {
 }
 static int dismissed(HWND dialog) {
     ULONGLONG until=GetTickCount64()+5000;
-    while(IsWindow(dialog)&&GetTickCount64()<until)pump(10);
+    while((IsWindow(dialog)||!IsWindowEnabled(client))&&GetTickCount64()<until)pump(10);
     return !IsWindow(dialog)&&IsWindowEnabled(client);
 }
 static void make_command(wchar_t *command,wchar_t **argv) {
